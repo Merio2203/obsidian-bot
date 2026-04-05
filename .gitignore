@@ -1,0 +1,15 @@
+.env
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swo
+.DS_Store
+
+data/*.db
+data/google_token.json
+data/*.log
+vault/.obsidian/
+
