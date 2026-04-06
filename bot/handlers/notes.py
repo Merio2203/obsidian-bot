@@ -55,7 +55,6 @@ def _action_keyboard(note_type: str, payload: str) -> InlineKeyboardMarkup:
         [
             [InlineKeyboardButton("✅ Превратить в задачу", callback_data=f"notes:to_task:{note_type}:{payload}")],
             [InlineKeyboardButton("📁 Превратить в проект", callback_data=f"notes:to_project:{note_type}:{payload}")],
-            [InlineKeyboardButton("◀️ В главное меню", callback_data="notes:menu")],
         ]
     )
 
@@ -143,12 +142,6 @@ async def notes_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     data = query.data or ""
-    if data == "notes:menu":
-        await query.message.reply_text(
-            "Главное меню:",
-            reply_markup=get_main_menu_keyboard(),
-        )
-        return
     parts = data.split(":")
     if len(parts) != 4:
         await query.message.reply_text("Не удалось обработать действие.")

@@ -33,11 +33,11 @@ class FakeUpdate:
 
 
 @pytest.mark.asyncio
-async def test_notes_menu_callback() -> None:
-    update = FakeUpdate(user_id=42, data="notes:menu")
+async def test_notes_to_task_callback() -> None:
+    update = FakeUpdate(user_id=42, data="notes:to_task:idea:15")
     context = types.SimpleNamespace(user_data={})
     await notes_action_callback(update, context)
 
     assert update.callback_query.answered is True
     assert update.callback_query.message.sent
-    assert "Главное меню" in update.callback_query.message.sent[0]
+    assert "✅ Задачи" in update.callback_query.message.sent[0]
