@@ -15,6 +15,7 @@ from bot.database.crud import (
     get_tasks_in_status,
     get_tasks_with_deadline,
 )
+from bot.services.google_calendar import GoogleCalendarService
 from bot.services.settings_service import SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.keyboards import get_main_menu_keyboard
@@ -37,14 +38,28 @@ def _fmt_task_list(items, empty_text: str) -> str:  # type: ignore[no-untyped-de
     return "\n".join(lines)
 
 
+def _fmt_calendar_list(events) -> str:  # type: ignore[no-untyped-def]
+    if not events:
+        return "Событий в Google Calendar на сегодня нет."
+    lines = []
+    for event in events[:7]:
+        lines.append(f"- {event.start_label}–{event.end_label} {event.title}")
+    return "\n".join(lines)
+
+
 async def build_today_dashboard_text() -> str:
     """Формирует текст дашборда на сегодня из локальных данных."""
+    runtime = await SettingsService(SessionLocal).get_runtime_settings()
     today = await _today_local_date()
     async with SessionLocal() as session:
         today_deadline_tasks = await get_tasks_with_deadline(session, today)
         in_progress_tasks = await get_tasks_in_status(session, "🟡 В работе")
         overdue_tasks = await get_overdue_tasks(session, today)
         diary_entry = await get_diary_entry_by_date(session, today)
+    try:
+        google_events = await GoogleCalendarService(runtime.timezone).list_events_for_date(today)
+    except Exception:
+        google_events = []
 
     diary_status = "✅ Запись дневника за сегодня есть" if diary_entry else "⚠️ Дневник за сегодня еще не заполнен"
     return (
@@ -55,6 +70,8 @@ async def build_today_dashboard_text() -> str:
         f"{_fmt_task_list(in_progress_tasks, 'Нет задач в статусе В работе.')}\n\n"
         "## ⏰ Просроченные\n"
         f"{_fmt_task_list(overdue_tasks, 'Просроченных задач нет.')}\n\n"
+        "## 📅 Google Calendar\n"
+        f"{_fmt_calendar_list(google_events)}\n\n"
         "## 📓 Дневник\n"
         f"{diary_status}"
     )

@@ -27,7 +27,9 @@ from bot.database.crud import (
     update_task_status,
 )
 from bot.services.ai_service import AIService
+from bot.services.google_calendar import GoogleCalendarService
 from bot.services.obsidian_service import ObsidianService
+from bot.services.settings_service import SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_task_markdown
 from bot.utils.keyboards import (
@@ -346,9 +348,26 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
     write_result = await obsidian.write_markdown(relative_path, markdown)
 
     google_event_id = None
+    calendar_note = ""
     if calendar_choice == "да":
-        # На текущем этапе интеграция календаря не включена; оставляем мягкий fallback.
-        logger.info("Пользователь запросил добавление в Google Calendar, интеграция будет на следующем этапе.")
+        if deadline is None:
+            calendar_note = "📅 Не добавил в Calendar: для события нужен дедлайн."
+        else:
+            try:
+                runtime = await SettingsService(SessionLocal).get_runtime_settings()
+                calendar_service = GoogleCalendarService(runtime.timezone)
+                google_event_id = await calendar_service.create_event_for_task(
+                    title=title,
+                    description=description,
+                    due_date=deadline,
+                )
+                if google_event_id:
+                    calendar_note = "📅 Добавлено в Google Calendar."
+                else:
+                    calendar_note = "📅 Calendar недоступен: проверь токен Google OAuth."
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Ошибка создания события Calendar: %s", exc)
+                calendar_note = "📅 Не удалось создать событие в Calendar."
 
     async with SessionLocal() as session:
         task = await create_task(
@@ -364,11 +383,6 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
     sync_note = "✅ Sync в Dropbox выполнен." if write_result.synced else f"⚠️ Sync не выполнен: {write_result.sync_error}"
-    calendar_note = (
-        "📅 В Calendar пока не добавлено (интеграция будет подключена следующим этапом)."
-        if calendar_choice == "да"
-        else ""
-    )
     await update.effective_message.reply_text(
         f"Задача создана:\n\n{_task_text(task.id, task.title, task.status, task.priority, task.obsidian_path)}\n\n{sync_note}\n{calendar_note}",
         parse_mode="HTML",

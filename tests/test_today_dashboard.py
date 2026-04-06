@@ -56,6 +56,7 @@ async def test_today_dashboard_contains_sections() -> None:
         assert "## 🗓️ Задачи на сегодня" in text
         assert "## 🔧 В работе" in text
         assert "## ⏰ Просроченные" in text
+        assert "## 📅 Google Calendar" in text
         assert "## 📓 Дневник" in text
         assert "Сделать релиз" in text
 

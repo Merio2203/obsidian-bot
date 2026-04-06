@@ -21,6 +21,7 @@ class Settings:
     google_client_id: str
     google_client_secret: str
     google_calendar_ids: list[str]
+    google_token_file: Path
     vault_path: Path
     dropbox_vault_path: str
     timezone: str
@@ -86,6 +87,7 @@ def load_settings() -> Settings:
         google_client_id=os.getenv("GOOGLE_CLIENT_ID", "").strip(),
         google_client_secret=os.getenv("GOOGLE_CLIENT_SECRET", "").strip(),
         google_calendar_ids=google_calendar_ids,
+        google_token_file=Path(os.getenv("GOOGLE_TOKEN_FILE", "/app/data/google_token.json").strip()),
         vault_path=vault_path,
         dropbox_vault_path=dropbox_vault_path,
         timezone=timezone,
