@@ -8,7 +8,7 @@ from typing import Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import DiaryEntry, Note, Project, Resource, Task
+from bot.database.models import AppSetting, DiaryEntry, Note, Project, Resource, Task
 
 
 async def create_project(
@@ -193,3 +193,22 @@ async def get_overdue_tasks(session: AsyncSession, today_date: date) -> Sequence
         .order_by(Task.deadline.asc())
     )
     return list(result.scalars().all())
+
+
+async def get_app_setting(session: AsyncSession, key: str) -> AppSetting | None:
+    """Возвращает настройку по ключу."""
+    result = await session.execute(select(AppSetting).where(AppSetting.key == key))
+    return result.scalar_one_or_none()
+
+
+async def upsert_app_setting(session: AsyncSession, key: str, value: str) -> AppSetting:
+    """Создает или обновляет настройку."""
+    setting = await get_app_setting(session, key)
+    if setting:
+        setting.value = value
+    else:
+        setting = AppSetting(key=key, value=value)
+        session.add(setting)
+    await session.commit()
+    await session.refresh(setting)
+    return setting

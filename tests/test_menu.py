@@ -35,5 +35,4 @@ async def test_start_handler_shows_greeting() -> None:
 async def test_menu_router_handles_button() -> None:
     update = FakeUpdate(user_id=42, text="⚙️ Настройки")
     await menu_router(update, None)
-    assert update.effective_message.sent
-    assert "настройки" in update.effective_message.sent[0].lower()
+    assert update.effective_message.sent == []

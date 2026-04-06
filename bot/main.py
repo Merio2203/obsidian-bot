@@ -16,6 +16,7 @@ from bot.handlers.menu import register_menu_handlers
 from bot.handlers.notes import register_notes_handlers
 from bot.handlers.projects import register_projects_handlers
 from bot.handlers.resources import register_resources_handlers
+from bot.handlers.settings import register_settings_handlers
 from bot.handlers.tasks import register_tasks_handlers
 from bot.handlers.today import register_today_handlers
 from bot.services.ai_service import AIService
@@ -56,6 +57,7 @@ async def run_bot() -> None:
     register_notes_handlers(app)
     register_resources_handlers(app)
     register_today_handlers(app)
+    register_settings_handlers(app)
     register_menu_handlers(app)
 
     loop = asyncio.get_running_loop()

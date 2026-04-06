@@ -18,10 +18,10 @@ from telegram.ext import (
     filters,
 )
 
-from bot.config import settings
 from bot.database import SessionLocal
 from bot.database.crud import create_diary_entry, get_diary_entry_by_date
 from bot.services.obsidian_service import ObsidianService
+from bot.services.settings_service import SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_diary_append_block, render_diary_markdown
 from bot.utils.keyboards import get_diary_mood_keyboard, get_main_menu_keyboard
@@ -33,13 +33,15 @@ DIARY_ACTION, DIARY_MOOD, DIARY_DAY, DIARY_DONE, DIARY_IDEAS, DIARY_TOMORROW = r
 DIARY_MOODS = {"😊", "😐", "😔", "😤", "🤩"}
 
 
-def _today_local() -> datetime.date:
-    tz = ZoneInfo(settings.timezone)
+async def _today_local() -> datetime.date:
+    service = SettingsService(SessionLocal)
+    runtime = await service.get_runtime_settings()
+    tz = ZoneInfo(runtime.timezone)
     return datetime.now(tz).date()
 
 
-def _today_iso() -> str:
-    return _today_local().isoformat()
+async def _today_iso() -> str:
+    return (await _today_local()).isoformat()
 
 
 def _diary_relative_path(date_iso: str) -> str:
@@ -63,7 +65,7 @@ async def diary_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     if not update.effective_message:
         return ConversationHandler.END
 
-    today = _today_local()
+    today = await _today_local()
     async with SessionLocal() as session:
         existing = await get_diary_entry_by_date(session, today)
 
@@ -77,7 +79,7 @@ async def diary_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         )
         return DIARY_ACTION
 
-    context.user_data["diary_path"] = _diary_relative_path(_today_iso())
+    context.user_data["diary_path"] = _diary_relative_path(await _today_iso())
     await update.effective_message.reply_text(
         "Выбери настроение за сегодня:",
         reply_markup=get_diary_mood_keyboard(),
@@ -95,7 +97,7 @@ async def diary_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
     data = query.data or ""
 
     if data == "diary:show":
-        path = context.user_data.get("diary_path", _diary_relative_path(_today_iso()))
+        path = context.user_data.get("diary_path", _diary_relative_path(await _today_iso()))
         obsidian = ObsidianService()
         try:
             content = await obsidian.read_markdown(path)
@@ -174,7 +176,7 @@ async def diary_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return DIARY_TOMORROW
     context.user_data["diary_tomorrow_text"] = update.effective_message.text.strip()
 
-    date_iso = _today_iso()
+    date_iso = await _today_iso()
     path = context.user_data.get("diary_path", _diary_relative_path(date_iso))
     mode = context.user_data.get("diary_mode", "new")
     mood = context.user_data.get("diary_mood", "😐")
@@ -209,7 +211,7 @@ async def diary_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             existing = await get_diary_entry_by_date(session, _today_local())
             if not existing:
                 try:
-                    await create_diary_entry(session, _today_local(), path)
+                    await create_diary_entry(session, await _today_local(), path)
                 except IntegrityError:
                     await session.rollback()
 

@@ -8,7 +8,6 @@ from zoneinfo import ZoneInfo
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from bot.config import settings
 from bot.database import SessionLocal
 from bot.database.crud import (
     get_diary_entry_by_date,
@@ -16,12 +15,15 @@ from bot.database.crud import (
     get_tasks_in_status,
     get_tasks_with_deadline,
 )
+from bot.services.settings_service import SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.keyboards import get_main_menu_keyboard
 
 
-def _today_local_date():
-    tz = ZoneInfo(settings.timezone)
+async def _today_local_date():
+    service = SettingsService(SessionLocal)
+    runtime = await service.get_runtime_settings()
+    tz = ZoneInfo(runtime.timezone)
     return datetime.now(tz).date()
 
 
@@ -37,7 +39,7 @@ def _fmt_task_list(items, empty_text: str) -> str:  # type: ignore[no-untyped-de
 
 async def build_today_dashboard_text() -> str:
     """Формирует текст дашборда на сегодня из локальных данных."""
-    today = _today_local_date()
+    today = await _today_local_date()
     async with SessionLocal() as session:
         today_deadline_tasks = await get_tasks_with_deadline(session, today)
         in_progress_tasks = await get_tasks_in_status(session, "🟡 В работе")

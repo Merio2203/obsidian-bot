@@ -110,6 +110,16 @@ class AICache(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 
 
+class AppSetting(Base):
+    """Ключ-значение для пользовательских настроек бота."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
+
+
 async def init_db(engine: AsyncEngine) -> None:
     """Создает все таблицы в БД (этап 1 без миграций)."""
     async with engine.begin() as conn:
