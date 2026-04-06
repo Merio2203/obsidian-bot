@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
@@ -36,10 +38,14 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     text = update.effective_message.text.strip()
-    response = MENU_RESPONSES.get(
-        text,
-        "Не понял команду. Используйте кнопки меню или команду /start.",
-    )
+    # Разделы с собственными ConversationHandler не должны обрабатываться fallback-меню.
+    if re.search(r"(Проекты|Задачи|Дневник)$", text):
+        return
+
+    response = MENU_RESPONSES.get(text)
+    if not response:
+        # Игнорируем произвольный текст, чтобы не мешать многошаговым диалогам.
+        return
     await update.effective_message.reply_text(response, reply_markup=get_main_menu_keyboard())
 
 
@@ -48,4 +54,7 @@ def register_menu_handlers(application: Application) -> None:
     application.add_handler(CommandHandler("start", start_handler))
     # Важно держать fallback-меню в отдельной группе, чтобы профильные ConversationHandler
     # (проекты/задачи/дневник) перехватывали свои кнопки раньше.
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router), group=10)
+    application.add_handler(
+        MessageHandler(filters.Regex(r".*(Идея|Ресурс|Входящие|Сегодня|Настройки)$") & ~filters.COMMAND, menu_router),
+        group=10,
+    )

@@ -113,7 +113,11 @@ async def projects_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
         return PROJECT_MENU
 
     if data.startswith("projects:set_status:"):
-        _, _, _, project_id_raw, status_key = data.split(":", 4)
+        parts = data.split(":")
+        if len(parts) != 4:
+            await query.message.reply_text("Не удалось разобрать команду смены статуса.")
+            return PROJECT_MENU
+        _, _, project_id_raw, status_key = parts
         project_id = int(project_id_raw)
         status = STATUS_MAP.get(status_key)
         if not status:

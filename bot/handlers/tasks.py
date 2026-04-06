@@ -175,7 +175,11 @@ async def tasks_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         return TASK_MENU
 
     if data.startswith("tasks:set_status:"):
-        _, _, _, task_id_raw, status_key = data.split(":", 4)
+        parts = data.split(":")
+        if len(parts) != 4:
+            await query.message.reply_text("Не удалось разобрать команду смены статуса.")
+            return TASK_MENU
+        _, _, task_id_raw, status_key = parts
         task_id = int(task_id_raw)
         new_status = TASK_STATUS_MAP.get(status_key)
         if not new_status:
