@@ -11,7 +11,6 @@ from bot.utils.decorators import owner_only
 from bot.utils.keyboards import get_main_menu_keyboard
 
 MENU_RESPONSES = {
-    "📚 Ресурс": "📚 Сохранение статей и видео будет добавлено следующим этапом.",
     "📊 Сегодня": "📊 Дашборд дня подключим после интеграции календаря и задач.",
     "⚙️ Настройки": "⚙️ Настройки будут доступны в следующих итерациях.",
 }
@@ -53,6 +52,6 @@ def register_menu_handlers(application: Application) -> None:
     # Важно держать fallback-меню в отдельной группе, чтобы профильные ConversationHandler
     # (проекты/задачи/дневник) перехватывали свои кнопки раньше.
     application.add_handler(
-        MessageHandler(filters.Regex(r".*(Ресурс|Сегодня|Настройки)$") & ~filters.COMMAND, menu_router),
+        MessageHandler(filters.Regex(r".*(Сегодня|Настройки)$") & ~filters.COMMAND, menu_router),
         group=10,
     )

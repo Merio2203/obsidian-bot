@@ -155,3 +155,30 @@ def render_note_markdown(title: str, note_type: str, tags: list[str], content: s
         "## 📝 Содержание\n"
         f"{content}\n"
     )
+
+
+def render_resource_markdown(
+    title: str,
+    url: str,
+    resource_type: str,
+    tags: list[str],
+    summary: str,
+    key_points: list[str],
+) -> str:
+    """Формирует markdown для сохраненного ресурса."""
+    saved = today_iso()
+    tags_line = ", ".join(tags)
+    points = "\n".join([f"- {point}" for point in key_points]) if key_points else "- Уточнить ключевые мысли"
+    return (
+        "---\n"
+        f"title: {title}\n"
+        f"url: {url}\n"
+        f"type: {resource_type}\n"
+        f"tags: [{tags_line}]\n"
+        f"saved: {saved}\n"
+        "---\n\n"
+        "## 📝 Резюме\n"
+        f"{summary}\n\n"
+        "## 🔑 Ключевые мысли\n"
+        f"{points}\n"
+    )

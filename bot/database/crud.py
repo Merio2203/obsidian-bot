@@ -8,7 +8,7 @@ from typing import Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import DiaryEntry, Note, Project, Task
+from bot.database.models import DiaryEntry, Note, Project, Resource, Task
 
 
 async def create_project(
@@ -143,3 +143,25 @@ async def create_note(
     await session.commit()
     await session.refresh(note)
     return note
+
+
+async def create_resource(
+    session: AsyncSession,
+    title: str,
+    url: str,
+    resource_type: str,
+    tags: str,
+    obsidian_path: str,
+) -> Resource:
+    """Создает ресурс (статья или видео)."""
+    resource = Resource(
+        title=title,
+        url=url,
+        type=resource_type,
+        tags=tags,
+        obsidian_path=obsidian_path,
+    )
+    session.add(resource)
+    await session.commit()
+    await session.refresh(resource)
+    return resource

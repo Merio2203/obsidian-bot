@@ -33,7 +33,7 @@ async def test_start_handler_shows_greeting() -> None:
 
 @pytest.mark.asyncio
 async def test_menu_router_handles_button() -> None:
-    update = FakeUpdate(user_id=42, text="📚 Ресурс")
+    update = FakeUpdate(user_id=42, text="📊 Сегодня")
     await menu_router(update, None)
     assert update.effective_message.sent
-    assert "сохранение статей и видео" in update.effective_message.sent[0].lower()
+    assert "дашборд дня" in update.effective_message.sent[0].lower()
