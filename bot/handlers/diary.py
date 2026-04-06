@@ -247,7 +247,7 @@ def register_diary_handlers(application: Application) -> None:
     """Регистрирует ConversationHandler для дневника."""
     conversation = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex("^📓 Дневник$"), diary_entry),
+            MessageHandler(filters.Regex(r".*Дневник$"), diary_entry),
             CommandHandler("diary", diary_entry),
         ],
         states={

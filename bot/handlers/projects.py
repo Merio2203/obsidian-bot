@@ -299,7 +299,7 @@ def register_projects_handlers(application: Application) -> None:
     """Регистрирует ConversationHandler раздела проектов."""
     conversation = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex("^📁 Проекты$"), projects_entry),
+            MessageHandler(filters.Regex(r".*Проекты$"), projects_entry),
             CommandHandler("projects", projects_entry),
         ],
         states={

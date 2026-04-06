@@ -442,7 +442,7 @@ def register_tasks_handlers(application: Application) -> None:
     """Регистрирует ConversationHandler раздела задач."""
     conversation = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex("^✅ Задачи$"), tasks_entry),
+            MessageHandler(filters.Regex(r".*Задачи$"), tasks_entry),
             CommandHandler("tasks", tasks_entry),
         ],
         states={

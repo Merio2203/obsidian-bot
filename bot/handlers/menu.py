@@ -9,9 +9,6 @@ from bot.utils.decorators import owner_only
 from bot.utils.keyboards import get_main_menu_keyboard
 
 MENU_RESPONSES = {
-    "📁 Проекты": "📁 Раздел проектов готовится. На следующем этапе добавим создание и управление.",
-    "✅ Задачи": "✅ Раздел задач готовится. Скоро здесь будет полный workflow.",
-    "📓 Дневник": "📓 Раздел дневника готовится. Напоминания и записи подключим следующим шагом.",
     "💡 Идея": "💡 Режим быстрых идей скоро будет доступен.",
     "📚 Ресурс": "📚 Сохранение статей и видео будет добавлено следующим этапом.",
     "📥 Входящие": "📥 Раздел входящих заметок скоро появится.",
@@ -49,4 +46,6 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 def register_menu_handlers(application: Application) -> None:
     """Регистрирует хендлеры главного меню в приложении."""
     application.add_handler(CommandHandler("start", start_handler))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router))
+    # Важно держать fallback-меню в отдельной группе, чтобы профильные ConversationHandler
+    # (проекты/задачи/дневник) перехватывали свои кнопки раньше.
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router), group=10)
