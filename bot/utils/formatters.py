@@ -139,3 +139,19 @@ def render_diary_append_block(
         "### 🎯 Планы на завтра\n"
         f"{tomorrow_text}\n"
     )
+
+
+def render_note_markdown(title: str, note_type: str, tags: list[str], content: str) -> str:
+    """Формирует markdown для быстрой заметки/идеи."""
+    saved = today_iso()
+    tags_line = ", ".join(tags)
+    return (
+        "---\n"
+        f"title: {title}\n"
+        f"type: {note_type}\n"
+        f"tags: [{tags_line}]\n"
+        f"saved: {saved}\n"
+        "---\n\n"
+        "## 📝 Содержание\n"
+        f"{content}\n"
+    )

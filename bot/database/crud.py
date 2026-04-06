@@ -8,7 +8,7 @@ from typing import Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import DiaryEntry, Project, Task
+from bot.database.models import DiaryEntry, Note, Project, Task
 
 
 async def create_project(
@@ -121,3 +121,25 @@ async def create_diary_entry(session: AsyncSession, entry_date: date, obsidian_p
     await session.commit()
     await session.refresh(entry)
     return entry
+
+
+async def create_note(
+    session: AsyncSession,
+    title: str,
+    note_type: str,
+    content: str,
+    tags: str,
+    obsidian_path: str,
+) -> Note:
+    """Создает быструю заметку (идея/входящие)."""
+    note = Note(
+        title=title,
+        type=note_type,
+        content=content,
+        tags=tags,
+        obsidian_path=obsidian_path,
+    )
+    session.add(note)
+    await session.commit()
+    await session.refresh(note)
+    return note

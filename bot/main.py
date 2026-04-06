@@ -13,6 +13,7 @@ from bot.database import SessionLocal, engine
 from bot.database.models import init_db
 from bot.handlers.diary import register_diary_handlers
 from bot.handlers.menu import register_menu_handlers
+from bot.handlers.notes import register_notes_handlers
 from bot.handlers.projects import register_projects_handlers
 from bot.handlers.tasks import register_tasks_handlers
 from bot.services.ai_service import AIService
@@ -50,6 +51,7 @@ async def run_bot() -> None:
     register_projects_handlers(app)
     register_tasks_handlers(app)
     register_diary_handlers(app)
+    register_notes_handlers(app)
     register_menu_handlers(app)
 
     loop = asyncio.get_running_loop()
