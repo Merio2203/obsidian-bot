@@ -91,3 +91,9 @@ def get_task_actions_keyboard(task_id: int) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("⬅️ К списку", callback_data="tasks:list")],
         ]
     )
+
+
+def get_diary_mood_keyboard() -> ReplyKeyboardMarkup:
+    """Reply-клавиатура выбора настроения для дневника."""
+    keyboard = [["😊", "😐", "😔", "😤", "🤩"]]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, one_time_keyboard=True)

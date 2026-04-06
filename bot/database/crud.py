@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import Project, Task
+from bot.database.models import DiaryEntry, Project, Task
 
 
 async def create_project(
@@ -105,3 +106,18 @@ async def update_task_status(session: AsyncSession, task: Task, status: str) -> 
     await session.commit()
     await session.refresh(task)
     return task
+
+
+async def get_diary_entry_by_date(session: AsyncSession, entry_date: date) -> DiaryEntry | None:
+    """Возвращает запись дневника по дате."""
+    result = await session.execute(select(DiaryEntry).where(DiaryEntry.date == entry_date))
+    return result.scalar_one_or_none()
+
+
+async def create_diary_entry(session: AsyncSession, entry_date: date, obsidian_path: str) -> DiaryEntry:
+    """Создает запись дневника в БД."""
+    entry = DiaryEntry(date=entry_date, obsidian_path=obsidian_path)
+    session.add(entry)
+    await session.commit()
+    await session.refresh(entry)
+    return entry

@@ -91,3 +91,51 @@ def render_task_markdown(
         "## 📎 Заметки\n"
         f"{notes}\n"
     )
+
+
+def render_diary_markdown(
+    date_iso: str,
+    mood: str,
+    day_text: str,
+    done_text: str,
+    ideas_text: str,
+    tomorrow_text: str,
+) -> str:
+    """Формирует markdown-шаблон дневника за день."""
+    return (
+        "---\n"
+        f"date: {date_iso}\n"
+        f"mood: {mood}\n"
+        "tags: [дневник]\n"
+        "---\n\n"
+        "## 🌅 Как прошёл день\n"
+        f"{day_text}\n\n"
+        "## ✅ Что сделал\n"
+        f"{done_text}\n\n"
+        "## 💭 Мысли и идеи\n"
+        f"{ideas_text}\n\n"
+        "## 🎯 Планы на завтра\n"
+        f"{tomorrow_text}\n"
+    )
+
+
+def render_diary_append_block(
+    mood: str,
+    day_text: str,
+    done_text: str,
+    ideas_text: str,
+    tomorrow_text: str,
+) -> str:
+    """Формирует блок дополнения к существующей записи дневника."""
+    return (
+        "## ➕ Дополнение\n"
+        f"Настроение: {mood}\n\n"
+        "### 🌅 Как прошёл день\n"
+        f"{day_text}\n\n"
+        "### ✅ Что сделал\n"
+        f"{done_text}\n\n"
+        "### 💭 Мысли и идеи\n"
+        f"{ideas_text}\n\n"
+        "### 🎯 Планы на завтра\n"
+        f"{tomorrow_text}\n"
+    )
