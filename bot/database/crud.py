@@ -165,3 +165,31 @@ async def create_resource(
     await session.commit()
     await session.refresh(resource)
     return resource
+
+
+async def get_tasks_in_status(session: AsyncSession, status: str) -> Sequence[Task]:
+    """Возвращает задачи в конкретном статусе."""
+    result = await session.execute(
+        select(Task).where(Task.status == status).order_by(Task.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_tasks_with_deadline(session: AsyncSession, deadline_date: date) -> Sequence[Task]:
+    """Возвращает задачи с дедлайном на конкретную дату."""
+    result = await session.execute(
+        select(Task).where(Task.deadline == deadline_date).order_by(Task.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_overdue_tasks(session: AsyncSession, today_date: date) -> Sequence[Task]:
+    """Возвращает просроченные задачи (дедлайн < сегодня и не завершены)."""
+    result = await session.execute(
+        select(Task)
+        .where(Task.deadline.is_not(None))
+        .where(Task.deadline < today_date)
+        .where(Task.status != "🟢 Готово")
+        .order_by(Task.deadline.asc())
+    )
+    return list(result.scalars().all())
