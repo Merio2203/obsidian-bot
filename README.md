@@ -50,6 +50,9 @@ Telegram-бот на Python для управления персональной
    - `DROPBOX_VAULT_PATH`
    - `TIMEZONE`
 
+Для Obsidian плагина `remotely-save` рекомендуемый путь:
+- `DROPBOX_VAULT_PATH=/Приложения/remotely-save/ObsidianVault`
+
 ## 5. Запуск через docker-compose
 
 ```bash
