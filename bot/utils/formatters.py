@@ -45,3 +45,49 @@ def render_project_overview_markdown(
         "## 📊 Прогресс\n"
         "- Проект создан\n"
     )
+
+
+def render_task_markdown(
+    title: str,
+    project_name: str,
+    priority: str,
+    description: str,
+    deadline_iso: str | None,
+    estimated_time: float | None,
+    created_at: str,
+    criteria_items: list[str],
+    subtask_items: list[str],
+    cursor_prompt: str = "",
+    notes: str = "",
+    task_type: str = "task",
+) -> str:
+    """Формирует markdown для задачи в формате Obsidian-шаблона."""
+    deadline_line = deadline_iso or ""
+    estimated_line = "" if estimated_time is None else str(estimated_time)
+    criteria = "\n".join([f"- [ ] {item}" for item in criteria_items]) if criteria_items else "- [ ] Определить критерии"
+    subtasks = "\n".join([f"- [ ] {item}" for item in subtask_items]) if subtask_items else "- [ ] Разбить задачу на шаги"
+
+    return (
+        "---\n"
+        f"title: {title}\n"
+        f"project: {project_name}\n"
+        "status: 🔴 Новая\n"
+        f"priority: {priority}\n"
+        f"type: {task_type}\n"
+        f"deadline: {deadline_line}\n"
+        f"estimated_time: {estimated_line}\n"
+        f"created: {created_at}\n"
+        "tags: [задача]\n"
+        "google_calendar_id: \n"
+        "---\n\n"
+        "## 📋 Описание\n"
+        f"{description}\n\n"
+        "## 🎯 Критерии готовности\n"
+        f"{criteria}\n\n"
+        "## 📝 Подзадачи\n"
+        f"{subtasks}\n\n"
+        "## 🤖 Cursor AI Промт\n"
+        f"{cursor_prompt}\n\n"
+        "## 📎 Заметки\n"
+        f"{notes}\n"
+    )

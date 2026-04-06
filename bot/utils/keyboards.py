@@ -46,3 +46,48 @@ def get_project_actions_keyboard(project_id: int) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("⬅️ К списку", callback_data="projects:list")],
         ]
     )
+
+
+def get_tasks_menu_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура меню задач."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("➕ Создать задачу", callback_data="tasks:create")],
+            [InlineKeyboardButton("📋 Список задач", callback_data="tasks:list")],
+            [InlineKeyboardButton("◀️ Назад в главное меню", callback_data="tasks:back")],
+        ]
+    )
+
+
+def get_task_priority_keyboard() -> ReplyKeyboardMarkup:
+    """Reply-клавиатура выбора приоритета."""
+    keyboard = [["🔥 Высокий", "⚡ Средний", "🌿 Низкий"]]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, one_time_keyboard=True)
+
+
+def get_task_calendar_keyboard() -> ReplyKeyboardMarkup:
+    """Reply-клавиатура подтверждения добавления в календарь."""
+    keyboard = [["Да", "Нет"]]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, one_time_keyboard=True)
+
+
+def get_task_status_keyboard(task_id: int) -> InlineKeyboardMarkup:
+    """Inline-клавиатура выбора статуса задачи."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🔴 Новая", callback_data=f"tasks:set_status:{task_id}:new")],
+            [InlineKeyboardButton("🟡 В работе", callback_data=f"tasks:set_status:{task_id}:in_progress")],
+            [InlineKeyboardButton("🟢 Готово", callback_data=f"tasks:set_status:{task_id}:done")],
+            [InlineKeyboardButton("⏸ На паузе", callback_data=f"tasks:set_status:{task_id}:paused")],
+        ]
+    )
+
+
+def get_task_actions_keyboard(task_id: int) -> InlineKeyboardMarkup:
+    """Inline-клавиатура действий задачи."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🔄 Изменить статус", callback_data=f"tasks:status:{task_id}")],
+            [InlineKeyboardButton("⬅️ К списку", callback_data="tasks:list")],
+        ]
+    )

@@ -13,6 +13,7 @@ from bot.database import SessionLocal, engine
 from bot.database.models import init_db
 from bot.handlers.menu import register_menu_handlers
 from bot.handlers.projects import register_projects_handlers
+from bot.handlers.tasks import register_tasks_handlers
 from bot.services.ai_service import AIService
 from bot.services.obsidian_service import ObsidianService
 
@@ -46,6 +47,7 @@ async def run_bot() -> None:
 
     app = Application.builder().token(settings.telegram_bot_token).build()
     register_projects_handlers(app)
+    register_tasks_handlers(app)
     register_menu_handlers(app)
 
     loop = asyncio.get_running_loop()

@@ -7,7 +7,7 @@ from typing import Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import Project
+from bot.database.models import Project, Task
 
 
 async def create_project(
@@ -56,3 +56,52 @@ async def update_project_status(session: AsyncSession, project: Project, status:
     await session.commit()
     await session.refresh(project)
     return project
+
+
+async def create_task(
+    session: AsyncSession,
+    project_id: int | None,
+    title: str,
+    priority: str,
+    task_type: str,
+    deadline,
+    estimated_time: float | None,
+    obsidian_path: str,
+    google_event_id: str | None = None,
+) -> Task:
+    """Создает задачу и сохраняет в БД."""
+    task = Task(
+        project_id=project_id,
+        title=title,
+        status="🔴 Новая",
+        priority=priority,
+        type=task_type,
+        deadline=deadline,
+        estimated_time=estimated_time,
+        obsidian_path=obsidian_path,
+        google_event_id=google_event_id,
+    )
+    session.add(task)
+    await session.commit()
+    await session.refresh(task)
+    return task
+
+
+async def get_tasks(session: AsyncSession) -> Sequence[Task]:
+    """Возвращает список задач."""
+    result = await session.execute(select(Task).order_by(Task.created_at.desc()))
+    return list(result.scalars().all())
+
+
+async def get_task_by_id(session: AsyncSession, task_id: int) -> Task | None:
+    """Возвращает задачу по ID."""
+    result = await session.execute(select(Task).where(Task.id == task_id))
+    return result.scalar_one_or_none()
+
+
+async def update_task_status(session: AsyncSession, task: Task, status: str) -> Task:
+    """Обновляет статус задачи."""
+    task.status = status
+    await session.commit()
+    await session.refresh(task)
+    return task
