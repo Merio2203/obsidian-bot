@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -28,7 +28,7 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     status: Mapped[str] = mapped_column(String(64), nullable=False, default="🟡 Активный")
     stack: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    repo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    repo_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     obsidian_path: Mapped[str] = mapped_column(String(512), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 
@@ -45,18 +45,18 @@ class Task(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
+    project_id: Mapped[Optional[int]] = mapped_column(ForeignKey("projects.id"), nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(64), nullable=False, default="🔴 Новая")
     priority: Mapped[str] = mapped_column(String(64), nullable=False, default="⚡ Средний")
     type: Mapped[str] = mapped_column(String(32), nullable=False, default="task")
-    deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
-    estimated_time: Mapped[float | None] = mapped_column(Float, nullable=True)
+    deadline: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    estimated_time: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     obsidian_path: Mapped[str] = mapped_column(String(512), nullable=False)
-    google_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_event_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 
-    project: Mapped[Project | None] = relationship(back_populates="tasks")
+    project: Mapped[Optional[Project]] = relationship(back_populates="tasks")
 
 
 class Resource(Base):
@@ -102,5 +102,5 @@ async def init_db(engine: AsyncEngine) -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
-ModelType = Project | Task | Resource | DiaryEntry | AICache
+ModelType = Any
 JsonDict = dict[str, Any]

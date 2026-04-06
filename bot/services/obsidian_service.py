@@ -15,7 +15,7 @@ from bot.config import settings
 logger = logging.getLogger(__name__)
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(frozen=True)
 class WriteResult:
     """Результат записи markdown-файла."""
 

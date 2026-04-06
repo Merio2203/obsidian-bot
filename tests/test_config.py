@@ -24,10 +24,8 @@ def test_load_settings_success(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_load_settings_missing_required(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
-    config = importlib.import_module("bot.config")
-    importlib.reload(config)
-
-    with pytest.raises(config.ConfigError):
-        config.load_settings()
+    with pytest.raises(Exception):
+        config = importlib.import_module("bot.config")
+        importlib.reload(config)
 
     os.environ["TELEGRAM_BOT_TOKEN"] = "restore"

@@ -9,7 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(frozen=True)
 class Settings:
     """Типизированные настройки приложения."""
 

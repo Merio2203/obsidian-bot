@@ -23,7 +23,7 @@ class AIServiceError(RuntimeError):
     """Контролируемая ошибка при работе с AI."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class AIRequestConfig:
     """Конфигурация запроса по типу операции."""
 
