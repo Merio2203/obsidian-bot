@@ -87,7 +87,6 @@ class ObsidianService:
             "diary": VAULT_FOLDERS["diary"],
             "resource": VAULT_FOLDERS["resources"],
             "resources": VAULT_FOLDERS["resources"],
-            "idea": VAULT_FOLDERS["ideas"],
             "inbox": VAULT_FOLDERS["inbox"],
             "note": None,
             "notes": None,

@@ -34,7 +34,6 @@ from bot.utils.helpers import (
 from bot.utils.keyboards import (
     MAIN_MENU_BUTTONS_REGEX,
     get_main_menu_keyboard,
-    get_projects_menu_keyboard,
     get_projects_reply_keyboard,
 )
 
@@ -96,7 +95,6 @@ async def projects_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         update,
         context,
         "Раздел проектов.\nВыберите действие:",
-        reply_markup=get_projects_menu_keyboard(),
     )
     return PROJECT_MENU
 
@@ -299,7 +297,6 @@ async def create_project_repo(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.effective_message.reply_text(
         f"Проект создан:\n\n{_project_text(project.name, project.status, project.stack, project.repo_url, project.obsidian_path)}\n\n{sync_note}",
         parse_mode="HTML",
-        reply_markup=get_projects_menu_keyboard(),
     )
     await update.effective_message.reply_text("📁 Раздел проектов", reply_markup=get_projects_reply_keyboard())
     return PROJECT_MENU
@@ -325,7 +322,6 @@ async def _send_projects_list(
             update,
             context,
             "Пока нет проектов. Нажмите «➕ Создать проект».",
-            reply_markup=get_projects_menu_keyboard(),
         )
         return
 
@@ -349,7 +345,7 @@ async def _send_project_card(
     index_map: dict[str, dict[str, str]] = context.user_data.get("projects_index", {})
     project = index_map.get(idx)
     if not project:
-        await edit_or_send(update, context, "Проект не найден. Обновите список.", reply_markup=get_projects_menu_keyboard())
+        await edit_or_send(update, context, "Проект не найден. Обновите список.")
         return
 
     project_name = project["name"]
@@ -386,14 +382,14 @@ async def _set_project_status(
 ) -> None:
     project_name = context.user_data.get("current_project_name")
     if not project_name:
-        await edit_or_send(update, context, "Сначала выберите проект из списка.", reply_markup=get_projects_menu_keyboard())
+        await edit_or_send(update, context, "Сначала выберите проект из списка.")
         return
 
     obsidian = ObsidianService()
     overview_relative = obsidian.get_project_overview_relative(project_name)
     overview_abs = obsidian.vault_path / overview_relative
     if not await asyncio.to_thread(overview_abs.exists):
-        await edit_or_send(update, context, "Файл проекта не найден.", reply_markup=get_projects_menu_keyboard())
+        await edit_or_send(update, context, "Файл проекта не найден.")
         return
 
     content = await asyncio.to_thread(overview_abs.read_text, "utf-8")

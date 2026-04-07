@@ -6,7 +6,7 @@ import asyncio
 import logging
 import signal
 
-from telegram.ext import Application
+from telegram.ext import Application, ContextTypes
 
 from bot.config import settings
 from bot.database import SessionLocal, engine
@@ -22,6 +22,9 @@ from bot.handlers.today import register_today_handlers
 from bot.services.ai_service import AIService
 from bot.services.obsidian_service import ObsidianService, sync_db_with_vault
 from bot.utils.logger import setup_logger
+from bot.utils.keyboards import get_main_reply_keyboard
+
+logger = logging.getLogger(__name__)
 
 
 async def on_startup() -> None:
@@ -47,6 +50,7 @@ async def run_bot() -> None:
     register_today_handlers(app)
     register_settings_handlers(app)
     register_menu_handlers(app)
+    app.add_error_handler(error_handler)
 
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
@@ -65,11 +69,11 @@ async def run_bot() -> None:
     setup_logger(bot=app.bot, owner_id=settings.telegram_owner_id)
     await app.start()
     await app.updater.start_polling(drop_pending_updates=True)
-    logging.getLogger(__name__).info("Бот запущен и ожидает сообщения.")
+    logger.info("Бот запущен и ожидает сообщения.")
 
     await stop_event.wait()
 
-    logging.getLogger(__name__).info("Получен сигнал завершения, останавливаем бот.")
+    logger.info("Получен сигнал завершения, останавливаем бот.")
     await app.updater.stop()
     await app.stop()
     await app.shutdown()
@@ -78,6 +82,20 @@ async def run_bot() -> None:
 def main() -> None:
     """Синхронная оболочка для запуска асинхронного приложения."""
     asyncio.run(run_bot())
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Глобальный обработчик необработанных исключений."""
+    logger.error("Необработанное исключение", exc_info=context.error)
+    try:
+        effective_message = getattr(update, "effective_message", None)
+        if effective_message:
+            await effective_message.reply_text(
+                "⚠️ Произошла ошибка. Попробуйте ещё раз или нажмите /start",
+                reply_markup=get_main_reply_keyboard(),
+            )
+    except Exception:
+        logger.debug("Не удалось отправить сообщение об ошибке пользователю", exc_info=True)
 
 
 if __name__ == "__main__":

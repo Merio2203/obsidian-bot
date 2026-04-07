@@ -101,16 +101,6 @@ def _action_keyboard(note_type: str, payload: str) -> InlineKeyboardMarkup:
 
 
 @owner_only
-async def idea_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Старт создания идеи."""
-    if not update.effective_message:
-        return ConversationHandler.END
-    context.user_data["note_type"] = "idea"
-    await ask_for_input(update, context, "💡 Введи текст идеи одним сообщением:", state=NOTE_TEXT)
-    return NOTE_TEXT
-
-
-@owner_only
 async def inbox_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Старт создания входящей заметки."""
     if not update.effective_message:
@@ -133,7 +123,7 @@ async def save_note_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return NOTE_TEXT
 
     title = _extract_title(content)
-    folder = VAULT_FOLDERS["ideas"] if note_type == "idea" else VAULT_FOLDERS["inbox"]
+    folder = VAULT_FOLDERS["inbox"]
 
     ai = AIService(SessionLocal)
     obsidian = ObsidianService()
@@ -178,7 +168,7 @@ async def save_note_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     sync_note = "✅ Sync в Dropbox выполнен." if result.synced else f"⚠️ Sync не выполнен: {result.sync_error}"
     await update.effective_message.reply_text(
-        f"Заметка сохранена.\n\nТип: {'Идея' if note_type == 'idea' else 'Входящие'}\n"
+        "Заметка сохранена.\n\nТип: Входящие\n"
         f"Название: {note.title}\n"
         f"Теги: {', '.join(tags)}\n"
         f"Файл: {note.obsidian_path}\n\n{sync_note}",
@@ -232,9 +222,7 @@ def register_notes_handlers(application: Application) -> None:
     """Регистрирует хендлеры идей и входящих заметок."""
     conversation = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex(r".*Идея$"), idea_entry),
             MessageHandler(filters.Regex(r".*Входящие$"), inbox_entry),
-            CommandHandler("idea", idea_entry),
             CommandHandler("inbox", inbox_entry),
         ],
         states={

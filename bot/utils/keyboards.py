@@ -1,19 +1,18 @@
 """Клавиатуры Telegram для интерфейса бота."""
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
 MAIN_MENU_BUTTONS = (
     "📁 Проекты",
     "✅ Задачи",
     "📓 Дневник",
-    "💡 Идея",
     "📚 Ресурс",
     "📥 Входящие",
     "📊 Сегодня",
     "⚙️ Настройки",
 )
 
-MAIN_MENU_BUTTONS_REGEX = r"^(📁 Проекты|✅ Задачи|📓 Дневник|💡 Идея|📚 Ресурс|📥 Входящие|📊 Сегодня|⚙️ Настройки)$"
+MAIN_MENU_BUTTONS_REGEX = r"^(📁 Проекты|✅ Задачи|📓 Дневник|📚 Ресурс|📥 Входящие|📊 Сегодня|⚙️ Настройки)$"
 REMOVE_KEYBOARD = ReplyKeyboardRemove()
 
 
@@ -26,9 +25,9 @@ def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
     """Главная reply-клавиатура."""
     keyboard = [
         ["📁 Проекты", "✅ Задачи"],
-        ["📓 Дневник", "💡 Идея"],
-        ["📚 Ресурс", "📥 Входящие"],
-        ["📊 Сегодня", "⚙️ Настройки"],
+        ["📓 Дневник", "📚 Ресурс"],
+        ["📥 Входящие", "📊 Сегодня"],
+        ["⚙️ Настройки"],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
@@ -42,6 +41,15 @@ def get_tasks_reply_keyboard() -> ReplyKeyboardMarkup:
     """Контекстная reply-клавиатура раздела задач."""
     keyboard = [["➕ Создать задачу"], ["◀️ Назад"]]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+def get_task_project_select_keyboard(projects: list[str]) -> ReplyKeyboardMarkup:
+    """Клавиатура выбора проекта при создании задачи."""
+    buttons: list[list[KeyboardButton]] = [[KeyboardButton("Без проекта")]]
+    for project_name in projects:
+        buttons.append([KeyboardButton(project_name)])
+    buttons.append([KeyboardButton("❌ Отмена")])
+    return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
 
 
 def get_projects_reply_keyboard() -> ReplyKeyboardMarkup:

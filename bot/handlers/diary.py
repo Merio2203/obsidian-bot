@@ -35,7 +35,6 @@ from bot.utils.helpers import (
 from bot.utils.keyboards import (
     MAIN_MENU_BUTTONS_REGEX,
     get_diary_edit_sections_keyboard,
-    get_diary_existing_entry_keyboard,
     get_diary_mood_keyboard,
     get_diary_reply_keyboard,
     get_main_menu_keyboard,
@@ -119,8 +118,8 @@ async def diary_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     if existing:
         context.user_data["diary_path"] = existing.obsidian_path
         await update.effective_message.reply_text(
-            "Запись за сегодня уже есть. Что делаем?",
-            reply_markup=get_diary_existing_entry_keyboard(),
+            "Запись за сегодня уже есть. Выбери действие на клавиатуре ниже.",
+            reply_markup=get_diary_reply_keyboard(),
         )
         return DIARY_ACTION
 
@@ -146,7 +145,7 @@ async def diary_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         obsidian = ObsidianService()
         try:
             content = await obsidian.read_markdown(path)
-            await edit_or_send(update, context, content[:3500], reply_markup=get_diary_existing_entry_keyboard())
+            await edit_or_send(update, context, content[:3500], reply_markup=get_diary_edit_sections_keyboard())
         except Exception:
             logger.error("Ошибка чтения дневника", exc_info=True)
             await edit_or_send(update, context, "Не удалось прочитать запись дневника.")
@@ -166,6 +165,41 @@ async def diary_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.message.reply_text("Главное меню", reply_markup=get_main_menu_keyboard())
         return ConversationHandler.END
 
+    return DIARY_ACTION
+
+
+@owner_only
+async def diary_action_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обрабатывает контекстные reply-кнопки раздела дневника."""
+    if not update.effective_message or not update.effective_message.text:
+        return DIARY_ACTION
+    text = update.effective_message.text.strip()
+    if text == "📝 Новая запись":
+        context.user_data["diary_path"] = _diary_relative_path(await _today_iso())
+        await update.effective_message.reply_text(
+            "Выбери настроение за сегодня:",
+            reply_markup=get_diary_mood_keyboard(),
+        )
+        return DIARY_MOOD
+    if text == "📖 Читать":
+        path = context.user_data.get("diary_path", _diary_relative_path(await _today_iso()))
+        obsidian = ObsidianService()
+        try:
+            content = await obsidian.read_markdown(path)
+            await update.effective_message.reply_text(content[:3500], reply_markup=get_diary_reply_keyboard())
+        except Exception:
+            logger.error("Ошибка чтения дневника", exc_info=True)
+            await update.effective_message.reply_text("Не удалось прочитать запись дневника.", reply_markup=get_diary_reply_keyboard())
+        return DIARY_ACTION
+    if text == "✏️ Редактировать":
+        await update.effective_message.reply_text(
+            "Какой раздел хочешь отредактировать?",
+            reply_markup=get_diary_edit_sections_keyboard(),
+        )
+        return DIARY_EDIT_CHOOSE_SECTION
+    if text == "◀️ Назад":
+        await update.effective_message.reply_text("Главное меню:", reply_markup=get_main_menu_keyboard())
+        return ConversationHandler.END
     return DIARY_ACTION
 
 
@@ -358,7 +392,10 @@ def register_diary_handlers(application: Application) -> None:
             CommandHandler("diary", diary_entry),
         ],
         states={
-            DIARY_ACTION: [CallbackQueryHandler(diary_action_callback, pattern=r"^diary:")],
+            DIARY_ACTION: [
+                CallbackQueryHandler(diary_action_callback, pattern=r"^diary:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, diary_action_text),
+            ],
             DIARY_MOOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, diary_mood)],
             DIARY_DAY: [MessageHandler(filters.TEXT & ~filters.COMMAND, diary_day)],
             DIARY_DONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, diary_done)],

@@ -43,11 +43,11 @@ from bot.utils.keyboards import (
     MAIN_MENU_BUTTONS_REGEX,
     get_main_menu_keyboard,
     get_task_actions_keyboard,
+    get_task_project_select_keyboard,
     get_task_calendar_keyboard,
     get_task_priority_keyboard,
     get_task_status_keyboard,
     get_tasks_reply_keyboard,
-    get_tasks_menu_keyboard,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,7 +154,6 @@ async def tasks_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         update,
         context,
         "Раздел задач.\nВыберите действие:",
-        reply_markup=get_tasks_menu_keyboard(),
     )
     return TASK_MENU
 
@@ -237,6 +236,30 @@ async def tasks_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.effective_message.reply_text("Главное меню", reply_markup=get_main_menu_keyboard())
         return ConversationHandler.END
     return TASK_MENU
+
+
+@owner_only
+async def create_task_project_select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Сохраняет выбор проекта для задачи из reply-клавиатуры."""
+    if not update.effective_message or not update.effective_message.text:
+        return TASK_PROJECT
+    text = update.effective_message.text.strip()
+    if text == "❌ Отмена":
+        return await universal_cancel_handler(update, context)
+    if text == "Без проекта":
+        context.user_data["task_project_id"] = None
+        await ask_for_input(update, context, "Введите название задачи:", state=TASK_TITLE)
+        return TASK_TITLE
+
+    projects_map: dict[str, int] = context.user_data.get("task_projects_map", {})
+    project_id = projects_map.get(text)
+    if project_id is None:
+        await update.effective_message.reply_text("Выберите проект кнопкой или нажмите «❌ Отмена».")
+        return TASK_PROJECT
+
+    context.user_data["task_project_id"] = project_id
+    await ask_for_input(update, context, "Введите название задачи:", state=TASK_TITLE)
+    return TASK_TITLE
 
 
 @owner_only
@@ -461,7 +484,6 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.effective_message.reply_text(
         f"Задача создана:\n\n{_task_text(task.id, task.title, task.status, task.priority, task.obsidian_path)}\n\n{sync_note}\n{calendar_note}",
         parse_mode="HTML",
-        reply_markup=get_tasks_menu_keyboard(),
     )
     await update.effective_message.reply_text("✅ Раздел задач", reply_markup=get_tasks_reply_keyboard())
 
@@ -482,12 +504,19 @@ async def _ask_project_selection(update: Update, context: ContextTypes.DEFAULT_T
     async with SessionLocal() as session:
         projects = await get_projects(session)
 
-    rows = []
-    for project in projects:
-        rows.append([InlineKeyboardButton(project.name, callback_data=f"tasks:project:{project.id}")])
-    rows.append([InlineKeyboardButton("Без проекта", callback_data="tasks:project:none")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="tasks:back")])
-    await edit_or_send(update, context, "Выберите проект для задачи:", reply_markup=InlineKeyboardMarkup(rows))
+    projects_map = {project.name: project.id for project in projects}
+    context.user_data["task_projects_map"] = projects_map
+    project_names = list(projects_map.keys())
+    if update.effective_message:
+        await update.effective_message.reply_text(
+            "Выберите проект для задачи:",
+            reply_markup=get_task_project_select_keyboard(project_names),
+        )
+    elif update.callback_query and update.callback_query.message:
+        await update.callback_query.message.reply_text(
+            "Выберите проект для задачи:",
+            reply_markup=get_task_project_select_keyboard(project_names),
+        )
 
 
 async def _send_tasks_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -551,7 +580,7 @@ def register_tasks_handlers(application: Application) -> None:
             ],
             TASK_PROJECT: [
                 CallbackQueryHandler(tasks_menu_callback, pattern=r"^tasks:"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, tasks_menu_text),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_project_select),
             ],
             TASK_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_title)],
             TASK_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_description)],

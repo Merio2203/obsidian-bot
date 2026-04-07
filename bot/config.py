@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 VAULT_FOLDERS: dict[str, str] = {
     "projects": "Проекты",
     "diary": "Дневник",
-    "ideas": "Идеи",
     "resources": "Ресурсы",
     "inbox": "Входящие",
 }

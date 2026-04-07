@@ -126,7 +126,7 @@ async def ask_for_input(
     if not anchor:
         return None
 
-    hide_msg = await anchor.reply_text("\u200b", reply_markup=REMOVE_KEYBOARD)
+    hide_msg = await anchor.reply_text("⌨️", reply_markup=REMOVE_KEYBOARD)
     try:
         await hide_msg.delete()
     except Exception:
