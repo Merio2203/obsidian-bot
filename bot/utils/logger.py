@@ -71,11 +71,21 @@ def apply_log_level(level_name: str) -> str:
     logger = logging.getLogger("obsidian_bot")
     logger.setLevel(level)
     for handler in logger.handlers:
-        handler.setLevel(level if isinstance(handler, logging.handlers.TimedRotatingFileHandler) else logging.INFO)
+        if isinstance(handler, TelegramErrorHandler):
+            handler.setLevel(logging.ERROR)
+        elif isinstance(handler, logging.handlers.TimedRotatingFileHandler):
+            handler.setLevel(level)
+        else:
+            handler.setLevel(logging.INFO)
     root = logging.getLogger()
     root.setLevel(level)
     for handler in root.handlers:
-        handler.setLevel(level if isinstance(handler, logging.handlers.TimedRotatingFileHandler) else logging.INFO)
+        if isinstance(handler, TelegramErrorHandler):
+            handler.setLevel(logging.ERROR)
+        elif isinstance(handler, logging.handlers.TimedRotatingFileHandler):
+            handler.setLevel(level)
+        else:
+            handler.setLevel(logging.INFO)
     return normalized if normalized in LOG_LEVELS else DEFAULT_LOG_LEVEL
 
 
@@ -123,7 +133,7 @@ def setup_logger(
 
     applied_level = apply_log_level(level_name)
     root = logging.getLogger()
-    root.handlers = list(logger.handlers)
+    root.handlers = [h for h in logger.handlers if not isinstance(h, TelegramErrorHandler)]
     root.setLevel(logger.level)
     logger.info("Логгер инициализирован. Текущий уровень: %s", applied_level)
     return logger
