@@ -20,15 +20,17 @@ from bot.services.obsidian_service import ObsidianService
 from bot.services.settings_service import SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.keyboards import get_main_menu_keyboard
+from bot.utils.logger import LOG_LEVELS, apply_log_level
 
 logger = logging.getLogger(__name__)
 
 SETTINGS_MENU, SETTINGS_TZ_INPUT = range(2)
 
 
-def _settings_keyboard() -> InlineKeyboardMarkup:
+def _settings_keyboard(log_level: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
+            [InlineKeyboardButton(f"📊 Уровень логов: {log_level}", callback_data="settings:log_level")],
             [InlineKeyboardButton("🌍 Изменить timezone", callback_data="settings:set_tz")],
             [InlineKeyboardButton("📓 Переключить напоминание дневника", callback_data="settings:toggle_diary")],
             [InlineKeyboardButton("🌅 Переключить утренний дайджест", callback_data="settings:toggle_digest")],
@@ -38,15 +40,31 @@ def _settings_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def _settings_text(timezone_name: str, diary_enabled: bool, digest_enabled: bool) -> str:
+def _settings_text(timezone_name: str, diary_enabled: bool, digest_enabled: bool, log_level: str) -> str:
     diary_state = "ВКЛ" if diary_enabled else "ВЫКЛ"
     digest_state = "ВКЛ" if digest_enabled else "ВЫКЛ"
     return (
         "⚙️ Текущие настройки:\n\n"
         f"- Timezone: {timezone_name}\n"
         f"- Напоминание о дневнике: {diary_state}\n"
-        f"- Утренний дайджест: {digest_state}"
+        f"- Утренний дайджест: {digest_state}\n"
+        f"- Уровень логов: {log_level}"
     )
+
+
+def _log_levels_keyboard(current_level: str) -> InlineKeyboardMarkup:
+    buttons = []
+    for level in ("DEBUG", "INFO", "WARNING", "ERROR"):
+        mark = "✅ " if level == current_level else ""
+        label = {
+            "DEBUG": "🔍 DEBUG — всё подряд",
+            "INFO": "ℹ️ INFO — основные события",
+            "WARNING": "⚠️ WARNING — предупреждения",
+            "ERROR": "🔴 ERROR — только ошибки",
+        }[level]
+        buttons.append([InlineKeyboardButton(f"{mark}{label}", callback_data=f"settings:set_log_level:{level}")])
+    buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="settings:back_to_settings")])
+    return InlineKeyboardMarkup(buttons)
 
 
 @owner_only
@@ -57,8 +75,8 @@ async def settings_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     service = SettingsService(SessionLocal)
     cfg = await service.get_runtime_settings()
     await update.effective_message.reply_text(
-        _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled),
-        reply_markup=_settings_keyboard(),
+        _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled, cfg.log_level),
+        reply_markup=_settings_keyboard(cfg.log_level),
     )
     return SETTINGS_MENU
 
@@ -77,19 +95,42 @@ async def settings_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
         await query.message.reply_text("Отправь timezone, например: Europe/Kaliningrad")
         return SETTINGS_TZ_INPUT
 
+    if data == "settings:log_level":
+        current = await service.get_log_level()
+        await query.message.reply_text(
+            "Выберите уровень логирования:",
+            reply_markup=_log_levels_keyboard(current),
+        )
+        return SETTINGS_MENU
+
+    if data.startswith("settings:set_log_level:"):
+        level_name = data.split(":")[-1].upper()
+        if level_name not in LOG_LEVELS:
+            await query.answer("Неизвестный уровень", show_alert=True)
+            return SETTINGS_MENU
+        await service.set_log_level(level_name)
+        apply_log_level(level_name)
+        await query.answer(f"✅ Уровень логов изменён на {level_name}", show_alert=False)
+        cfg = await service.get_runtime_settings()
+        await query.message.reply_text(
+            _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled, cfg.log_level),
+            reply_markup=_settings_keyboard(cfg.log_level),
+        )
+        return SETTINGS_MENU
+
     if data == "settings:toggle_diary":
         cfg = await service.toggle_diary_reminder()
         await query.message.reply_text(
-            _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled),
-            reply_markup=_settings_keyboard(),
+            _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled, cfg.log_level),
+            reply_markup=_settings_keyboard(cfg.log_level),
         )
         return SETTINGS_MENU
 
     if data == "settings:toggle_digest":
         cfg = await service.toggle_morning_digest()
         await query.message.reply_text(
-            _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled),
-            reply_markup=_settings_keyboard(),
+            _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled, cfg.log_level),
+            reply_markup=_settings_keyboard(cfg.log_level),
         )
         return SETTINGS_MENU
 
@@ -97,7 +138,16 @@ async def settings_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
         obsidian = ObsidianService()
         ok, err = await obsidian.sync_to_dropbox()
         text = "✅ Sync выполнен." if ok else f"⚠️ Ошибка sync: {err}"
-        await query.message.reply_text(text, reply_markup=_settings_keyboard())
+        cfg = await service.get_runtime_settings()
+        await query.message.reply_text(text, reply_markup=_settings_keyboard(cfg.log_level))
+        return SETTINGS_MENU
+
+    if data == "settings:back_to_settings":
+        cfg = await service.get_runtime_settings()
+        await query.message.reply_text(
+            _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled, cfg.log_level),
+            reply_markup=_settings_keyboard(cfg.log_level),
+        )
         return SETTINGS_MENU
 
     if data == "settings:back":
@@ -122,8 +172,8 @@ async def settings_timezone_input(update: Update, context: ContextTypes.DEFAULT_
         return SETTINGS_TZ_INPUT
 
     await update.effective_message.reply_text(
-        _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled),
-        reply_markup=_settings_keyboard(),
+        _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled, cfg.log_level),
+        reply_markup=_settings_keyboard(cfg.log_level),
     )
     return SETTINGS_MENU
 

@@ -12,4 +12,5 @@ __pycache__/
 data/*.db
 data/google_token.json
 data/*.log
+data/logs/
 vault/.obsidian/

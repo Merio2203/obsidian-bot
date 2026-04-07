@@ -392,7 +392,7 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
     existing_links = await obsidian.get_existing_links("all")
     final_title = title
     tags: list[str] = ["задача"]
-    links: list[str] = [f"[[{project_name}]]"] if project_name != "Без проекта" else []
+    links: list[str] = [f"[[Проект {project_name}]]"] if project_name != "Без проекта" else []
     try:
         short_title = await ai_service.generate_short_title(title, description)
         if short_title:

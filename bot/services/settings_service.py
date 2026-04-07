@@ -14,6 +14,7 @@ from bot.database.crud import get_app_setting, upsert_app_setting
 SETTINGS_TZ_KEY = "timezone"
 SETTINGS_DIARY_REMINDER_KEY = "diary_reminder_enabled"
 SETTINGS_MORNING_DIGEST_KEY = "morning_digest_enabled"
+SETTINGS_LOG_LEVEL_KEY = "log_level"
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class RuntimeSettings:
     timezone: str
     diary_reminder_enabled: bool
     morning_digest_enabled: bool
+    log_level: str
 
 
 def _to_bool(raw: str | None, default: bool) -> bool:
@@ -45,6 +47,7 @@ class SettingsService:
             timezone=(tz_raw.value if tz_raw else settings.timezone),
             diary_reminder_enabled=_to_bool(diary_raw.value if diary_raw else None, True),
             morning_digest_enabled=_to_bool(digest_raw.value if digest_raw else None, True),
+            log_level=(await self.get_log_level()),
         )
 
     async def set_timezone(self, timezone_name: str) -> RuntimeSettings:
@@ -66,3 +69,16 @@ class SettingsService:
         async with self._session_factory() as session:
             await upsert_app_setting(session, SETTINGS_MORNING_DIGEST_KEY, new_value)
         return await self.get_runtime_settings()
+
+    async def get_log_level(self) -> str:
+        """Возвращает сохранённый уровень логирования."""
+        async with self._session_factory() as session:
+            level = await get_app_setting(session, SETTINGS_LOG_LEVEL_KEY)
+        return (level.value if level else "INFO").upper()
+
+    async def set_log_level(self, level_name: str) -> str:
+        """Сохраняет уровень логирования."""
+        normalized = level_name.upper()
+        async with self._session_factory() as session:
+            await upsert_app_setting(session, SETTINGS_LOG_LEVEL_KEY, normalized)
+        return normalized

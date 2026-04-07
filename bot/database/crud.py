@@ -212,3 +212,14 @@ async def upsert_app_setting(session: AsyncSession, key: str, value: str) -> App
     await session.commit()
     await session.refresh(setting)
     return setting
+
+
+async def get_setting(session: AsyncSession, key: str) -> str | None:
+    """Упрощённый доступ к значению настройки."""
+    setting = await get_app_setting(session, key)
+    return setting.value if setting else None
+
+
+async def set_setting(session: AsyncSession, key: str, value: str) -> None:
+    """Упрощённая запись настройки key/value."""
+    await upsert_app_setting(session, key, value)

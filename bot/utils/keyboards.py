@@ -6,13 +6,13 @@ MAIN_MENU_BUTTONS = (
     "📁 Проекты",
     "✅ Задачи",
     "📓 Дневник",
-    "📚 Ресурс",
+    "📚 Библиотека",
     "📥 Входящие",
     "📊 Сегодня",
     "⚙️ Настройки",
 )
 
-MAIN_MENU_BUTTONS_REGEX = r"^(📁 Проекты|✅ Задачи|📓 Дневник|📚 Ресурс|📥 Входящие|📊 Сегодня|⚙️ Настройки)$"
+MAIN_MENU_BUTTONS_REGEX = r"^(📁 Проекты|✅ Задачи|📓 Дневник|📚 Библиотека|📥 Входящие|📊 Сегодня|⚙️ Настройки)$"
 REMOVE_KEYBOARD = ReplyKeyboardRemove()
 
 
@@ -25,7 +25,7 @@ def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
     """Главная reply-клавиатура."""
     keyboard = [
         ["📁 Проекты", "✅ Задачи"],
-        ["📓 Дневник", "📚 Ресурс"],
+        ["📓 Дневник", "📚 Библиотека"],
         ["📥 Входящие", "📊 Сегодня"],
         ["⚙️ Настройки"],
     ]
@@ -72,7 +72,7 @@ def get_diary_reply_keyboard() -> ReplyKeyboardMarkup:
 
 def get_resources_reply_keyboard() -> ReplyKeyboardMarkup:
     """Контекстная reply-клавиатура ресурсов."""
-    keyboard = [["➕ Добавить ресурс", "📋 Список"], ["◀️ Назад"]]
+    keyboard = [["➕ Добавить в библиотеку", "📋 Список"], ["◀️ Назад"]]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 

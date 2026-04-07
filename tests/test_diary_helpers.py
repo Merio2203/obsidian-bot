@@ -14,6 +14,7 @@ def test_render_diary_markdown() -> None:
     )
     assert "date: 2026-04-06" in markdown
     assert "title: Дневник за 06.04.2026" in markdown
+    assert 'aliases:\n  - "Дневник за 06.04.2026"' in markdown
     assert "mood: 😊" in markdown
     assert "# Дневник за 06.04.2026" in markdown
     assert "## 🌅 Как прошёл день" in markdown

@@ -11,11 +11,11 @@ from dotenv import load_dotenv
 VAULT_FOLDERS: dict[str, str] = {
     "projects": "Проекты",
     "diary": "Дневник",
-    "resources": "Ресурсы",
+    "resources": "Библиотека",
     "inbox": "Входящие",
 }
 
-PROJECT_SUBFOLDERS: tuple[str, str] = ("Задачи", "Ресурсы")
+PROJECT_SUBFOLDERS: tuple[str, str] = ("Задачи", "Библиотека")
 
 
 @dataclass(frozen=True)

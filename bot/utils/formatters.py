@@ -104,11 +104,15 @@ def render_task_markdown(
     estimated_line = "" if estimated_time is None else str(estimated_time)
     tags_line = ", ".join(tags)
     links_block = format_wikilinks_for_yaml(links)
+    if project_name and project_name != "Без проекта":
+        project_value = f'"[[Проект {project_name}]]"'
+    else:
+        project_value = '"Без проекта"'
 
     return (
         "---\n"
         f"title: {title}\n"
-        f"project: {project_name}\n"
+        f"project: {project_value}\n"
         "status: 🔴 Новая\n"
         f"priority: {priority}\n"
         f"type: {task_type}\n"
@@ -140,6 +144,8 @@ def render_diary_markdown(
     return (
         "---\n"
         f"title: {title}\n"
+        "aliases:\n"
+        f'  - "{title}"\n'
         f"date: {date_iso}\n"
         f"mood: {mood}\n"
         "tags: [дневник]\n"

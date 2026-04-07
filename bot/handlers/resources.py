@@ -117,8 +117,8 @@ async def resources_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """Старт раздела ресурсов."""
     if not update.effective_message:
         return ConversationHandler.END
-    await update.effective_message.reply_text("📚 Раздел ресурсов", reply_markup=get_resources_reply_keyboard())
-    await ask_for_input(update, context, "Отправь URL статьи или YouTube-видео.", state=RESOURCE_URL)
+    await update.effective_message.reply_text("📚 Раздел библиотеки", reply_markup=get_resources_reply_keyboard())
+    await ask_for_input(update, context, "Отправь URL статьи или YouTube-видео для библиотеки.", state=RESOURCE_URL)
     return RESOURCE_URL
 
 
@@ -204,7 +204,7 @@ async def resources_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     sync_note = "✅ Sync в Dropbox выполнен." if write_result.synced else f"⚠️ Sync не выполнен: {write_result.sync_error}"
     await update.effective_message.reply_text(
-        f"Ресурс сохранён.\n\nНазвание: {title}\nТип: {resource_type}\nТеги: {', '.join(tags)}\n"
+        f"Элемент библиотеки сохранён.\n\nНазвание: {title}\nТип: {resource_type}\nТеги: {', '.join(tags)}\n"
         f"Файл: {resource.obsidian_path}\n\n{sync_note}",
         reply_markup=_action_keyboard(resource.id, resource_type),
     )
@@ -257,8 +257,8 @@ def register_resources_handlers(application: Application) -> None:
     """Регистрирует хендлеры раздела ресурсов."""
     conversation = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex(r".*Ресурс$"), resources_entry),
-            MessageHandler(filters.Regex(r"^➕ Добавить ресурс$"), resources_entry),
+            MessageHandler(filters.Regex(r".*Библиотека$"), resources_entry),
+            MessageHandler(filters.Regex(r"^➕ Добавить в библиотеку$"), resources_entry),
             CommandHandler("resource", resources_entry),
         ],
         states={

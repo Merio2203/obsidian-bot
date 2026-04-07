@@ -49,7 +49,7 @@ def test_render_task_markdown() -> None:
         links=["[[CRM]]", "[[Сделать API]]"],
     )
     assert "title: Сделать API" in markdown
-    assert "project: CRM" in markdown
+    assert 'project: "[[Проект CRM]]"' in markdown
     assert "tags: [backend, api]" in markdown
     assert '  - "[[CRM]]"' in markdown
     assert '  - "[[Сделать API]]"' in markdown

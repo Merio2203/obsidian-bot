@@ -21,7 +21,8 @@ from bot.handlers.tasks import register_tasks_handlers
 from bot.handlers.today import register_today_handlers
 from bot.services.ai_service import AIService
 from bot.services.obsidian_service import ObsidianService, sync_db_with_vault
-from bot.utils.logger import setup_logger
+from bot.services.settings_service import SettingsService
+from bot.utils.logger import apply_log_level, setup_logger
 from bot.utils.keyboards import get_main_reply_keyboard
 
 logger = logging.getLogger(__name__)
@@ -33,12 +34,14 @@ async def on_startup() -> None:
     obsidian = ObsidianService()
     await obsidian.ensure_dirs()
     await sync_db_with_vault()
+    runtime_settings = await SettingsService(SessionLocal).get_runtime_settings()
+    apply_log_level(runtime_settings.log_level)
     _ = AIService(SessionLocal)
 
 
 async def run_bot() -> None:
     """Запускает bot polling c graceful shutdown."""
-    setup_logger()
+    setup_logger(level_name="INFO")
     await on_startup()
 
     app = Application.builder().token(settings.telegram_bot_token).build()
@@ -66,7 +69,12 @@ async def run_bot() -> None:
             pass
 
     await app.initialize()
-    setup_logger(bot=app.bot, owner_id=settings.telegram_owner_id)
+    runtime_settings = await SettingsService(SessionLocal).get_runtime_settings()
+    setup_logger(
+        bot=app.bot,
+        owner_id=settings.telegram_owner_id,
+        level_name=runtime_settings.log_level,
+    )
     await app.start()
     await app.updater.start_polling(drop_pending_updates=True)
     logger.info("Бот запущен и ожидает сообщения.")

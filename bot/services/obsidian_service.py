@@ -78,6 +78,8 @@ class ObsidianService:
         """
         Возвращает список имён файлов vault без расширения .md.
         Используется как контекст для генерации корректных Obsidian wikilinks.
+        Для проектов исключает "голые" имена папок (например `Sever VPN`),
+        чтобы AI выбирал только заметки вида `Проект Sever VPN`.
         """
         folder_map = {
             "project": VAULT_FOLDERS["projects"],
@@ -100,8 +102,16 @@ class ObsidianService:
             return []
 
         files = await asyncio.to_thread(lambda: list(search_path.rglob("*.md")))
-        names = sorted({file_path.stem for file_path in files if file_path.is_file()})
-        return names[:1000]
+        names = {file_path.stem for file_path in files if file_path.is_file()}
+
+        projects_path = self.vault_path / VAULT_FOLDERS["projects"]
+        folder_names: set[str] = set()
+        if await asyncio.to_thread(projects_path.exists):
+            project_dirs = await asyncio.to_thread(lambda: list(projects_path.iterdir()))
+            folder_names = {item.name for item in project_dirs if item.is_dir()}
+
+        filtered = sorted(name for name in names if name not in folder_names)
+        return filtered[:1000]
 
     async def get_projects_from_vault(self) -> list[dict[str, str]]:
         """
