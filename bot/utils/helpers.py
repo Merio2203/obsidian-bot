@@ -145,10 +145,24 @@ async def handle_unexpected_menu_button(
     """
     message = update.effective_message
     if not message or not message.text:
-        return context.user_data.get("input_state", ConversationHandler.END)
+        return ConversationHandler.END
 
+    # Если это не кнопка главного меню, fallback не должен вмешиваться.
     if message.text not in MAIN_MENU_BUTTONS:
+        return ConversationHandler.END
+
+    # Если мы уже не в режиме ввода текста, завершаем "зависший" conversation.
+    expecting_input = bool(context.user_data.get("expecting_text_input"))
+    if not expecting_input:
+        return ConversationHandler.END
+
+    # Дедупликация: один ответ на один update, даже если fallback сработал в нескольких handler.
+    update_id = getattr(update, "update_id", None)
+    guard_key = "_unexpected_menu_guard_update_id"
+    if update_id is not None and context.chat_data.get(guard_key) == update_id:
         return context.user_data.get("input_state", ConversationHandler.END)
+    if update_id is not None:
+        context.chat_data[guard_key] = update_id
 
     await message.reply_text(
         "⚠️ Сейчас ожидается ввод текста.\nНажми «❌ Отмена», чтобы прервать действие.",
