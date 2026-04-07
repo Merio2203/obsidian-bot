@@ -23,7 +23,7 @@ async def test_create_note() -> None:
                 note_type="idea",
                 content="Проверить автотеги",
                 tags="idea,ai",
-                obsidian_path="💡 Идеи/быстрая-мысль.md",
+                obsidian_path="Идеи/быстрая-мысль.md",
             )
             assert note.id > 0
             assert note.type == "idea"

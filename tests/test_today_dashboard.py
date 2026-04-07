@@ -31,7 +31,7 @@ async def test_today_dashboard_contains_sections() -> None:
                 task_type="task",
                 deadline=today,
                 estimated_time=2.0,
-                obsidian_path="📥 Входящие/release.md",
+                obsidian_path="Входящие/release.md",
             )
             t2 = await create_task(
                 session=session,
@@ -41,10 +41,10 @@ async def test_today_dashboard_contains_sections() -> None:
                 task_type="task",
                 deadline=today - timedelta(days=1),
                 estimated_time=1.0,
-                obsidian_path="📥 Входящие/debt.md",
+                obsidian_path="Входящие/debt.md",
             )
             await update_task_status(session, t2, "🟡 В работе")
-            await create_diary_entry(session, today, f"📓 Дневник/{today.isoformat()}.md")
+            await create_diary_entry(session, today, f"Дневник/{today.isoformat()}.md")
 
         old_factory = today_module.SessionLocal
         try:

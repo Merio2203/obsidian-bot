@@ -30,7 +30,7 @@ def test_parse_estimate() -> None:
 def test_normalize_tags_and_links() -> None:
     assert _normalize_tags(["#Python", "backend api", "python"]) == ["python", "backend-api"]
     assert _normalize_links(["Проект А", "[[Проект Б]]"]) == ["[[Проект А]]", "[[Проект Б]]"]
-    assert _normalize_links(["Проект Сайт.md", "[Сайт](📁 Проекты/Проект Сайт.md)"]) == [
+    assert _normalize_links(["Проект Сайт.md", "[Сайт](Проекты/Проект Сайт.md)"]) == [
         "[[Проект Сайт]]",
         "[[Проект Сайт|Сайт]]",
     ]

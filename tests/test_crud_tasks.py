@@ -26,7 +26,7 @@ async def test_create_and_update_task() -> None:
                 task_type="task",
                 deadline=date(2026, 4, 7),
                 estimated_time=2.0,
-                obsidian_path="📥 Входящие/new-task.md",
+                obsidian_path="Входящие/new-task.md",
             )
             assert task.id > 0
 

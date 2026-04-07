@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import re
+import asyncio
 from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError
@@ -26,6 +26,7 @@ from bot.database.crud import (
     get_projects,
     update_project_status,
 )
+from bot.config import PROJECT_SUBFOLDERS, VAULT_FOLDERS
 from bot.services.obsidian_service import ObsidianService
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_project_overview_markdown
@@ -45,13 +46,6 @@ STATUS_MAP = {
     "paused": "⏸ На паузе",
     "done": "🟢 Завершён",
 }
-
-
-def _safe_project_dir_name(name: str) -> str:
-    clean = re.sub(r"[\\/:*?\"<>|]", "", name).strip()
-    clean = re.sub(r"\s+", " ", clean)
-    return clean or "Новый проект"
-
 
 def _project_text(name: str, status: str, stack: str, repo_url: str | None, obsidian_path: str) -> str:
     return (
@@ -199,8 +193,11 @@ async def create_project_repo(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return ConversationHandler.END
 
-    project_dir = _safe_project_dir_name(name)
-    overview_relative = Path("📁 Проекты") / project_dir / "📋 Обзор.md"
+    obsidian = ObsidianService()
+    project_dir = obsidian.sanitize_filename(name)
+    overview_filename = f"Проект {name}"
+    overview_filename = f"{obsidian.sanitize_filename(overview_filename)}.md"
+    overview_relative = Path(VAULT_FOLDERS["projects"]) / project_dir / overview_filename
     markdown = render_project_overview_markdown(
         title=name,
         description=description or "Описание пока не добавлено.",
@@ -208,8 +205,13 @@ async def create_project_repo(update: Update, context: ContextTypes.DEFAULT_TYPE
         repo_url=repo_url,
     )
 
-    obsidian = ObsidianService()
     write_result = await obsidian.write_markdown(overview_relative, markdown)
+    for subfolder in PROJECT_SUBFOLDERS:
+        await asyncio.to_thread(
+            (obsidian.vault_path / VAULT_FOLDERS["projects"] / project_dir / subfolder).mkdir,
+            parents=True,
+            exist_ok=True,
+        )
 
     try:
         async with SessionLocal() as session:

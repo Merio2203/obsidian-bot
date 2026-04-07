@@ -17,6 +17,7 @@ from telegram.ext import (
     filters,
 )
 
+from bot.config import PROJECT_SUBFOLDERS, VAULT_FOLDERS
 from bot.database import SessionLocal
 from bot.database.crud import (
     create_task,
@@ -312,14 +313,14 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
         return ConversationHandler.END
 
     project_name = "Без проекта"
-    project_folder = "📥 Входящие"
+    project_folder = VAULT_FOLDERS["inbox"]
     if project_id is not None:
         async with SessionLocal() as session:
             project = await get_project_by_id(session, project_id)
         if project:
             project_name = project.name
-            project_dir = project.name.replace("/", "-")
-            project_folder = f"📁 Проекты/{project_dir}/✅ Задачи"
+            project_dir = ObsidianService.sanitize_filename(project.name)
+            project_folder = f"{VAULT_FOLDERS['projects']}/{project_dir}/{PROJECT_SUBFOLDERS[0]}"
         else:
             project_id = None
 
@@ -373,7 +374,19 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
                 logger.error("Ошибка создания события Calendar", exc_info=True)
                 calendar_note = "📅 Не удалось создать событие в Calendar."
 
-    file_name = f"{obsidian.sanitize_filename(final_title)}.md"
+    file_stem = obsidian.slugify_filename(final_title)
+    try:
+        generated_slug = await ai_service.generate_task_slug(
+            title=final_title,
+            description=description,
+            project_name=project_name if project_name != "Без проекта" else "",
+        )
+        if generated_slug:
+            file_stem = obsidian.slugify_filename(generated_slug)
+    except Exception:
+        logger.error("Не удалось сгенерировать slug имени файла задачи", exc_info=True)
+
+    file_name = f"{file_stem}.md"
     relative_path = f"{project_folder}/{file_name}"
     created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 

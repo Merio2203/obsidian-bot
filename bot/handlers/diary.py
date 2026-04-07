@@ -19,6 +19,7 @@ from telegram.ext import (
     filters,
 )
 
+from bot.config import VAULT_FOLDERS
 from bot.database import SessionLocal
 from bot.database.crud import create_diary_entry, get_diary_entry_by_date
 from bot.services.obsidian_service import ObsidianService
@@ -66,7 +67,7 @@ async def _today_iso() -> str:
 
 
 def _diary_relative_path(date_iso: str) -> str:
-    return f"📓 Дневник/{date_iso}.md"
+    return f"{VAULT_FOLDERS['diary']}/{date_iso}.md"
 
 
 def _extract_section_content(markdown: str, section_title: str) -> str:

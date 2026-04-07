@@ -15,6 +15,7 @@ from telegram.ext import (
     filters,
 )
 
+from bot.config import VAULT_FOLDERS
 from bot.database import SessionLocal
 from bot.database.crud import create_resource
 from bot.services.ai_service import AIService
@@ -130,13 +131,13 @@ async def resources_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             meta = await parser.parse_youtube(url)
             summary = await ai.summarize_youtube(meta.title, meta.description, meta.author)
             resource_type = "youtube"
-            folder = "📚 Ресурсы/Видео"
+            folder = f"{VAULT_FOLDERS['resources']}/Видео"
             title = meta.title
         else:
             article = await parser.parse_article(url)
             summary = await ai.summarize_article(article.title, article.content)
             resource_type = "article"
-            folder = "📚 Ресурсы/Статьи"
+            folder = f"{VAULT_FOLDERS['resources']}/Статьи"
             title = article.title
     except Exception:  # noqa: BLE001
         logger.error("Ошибка обработки ресурса", exc_info=True)
@@ -171,7 +172,7 @@ async def resources_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         links=links,
     )
 
-    file_name = f"{obsidian.sanitize_filename(title)}.md"
+    file_name = f"{obsidian.slugify_filename(title)}.md"
     relative_path = f"{folder}/{file_name}"
     write_result = await obsidian.write_markdown(relative_path, markdown)
 

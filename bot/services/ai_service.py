@@ -37,6 +37,7 @@ REQUEST_CONFIGS = {
     "diary_tags_links": AIRequestConfig(task_type="diary_tags_links", max_tokens=150),
     "resource_tags_links": AIRequestConfig(task_type="resource_tags_links", max_tokens=150),
     "short_title": AIRequestConfig(task_type="short_title", max_tokens=50),
+    "task_slug": AIRequestConfig(task_type="task_slug", max_tokens=50),
     "article_summary": AIRequestConfig(task_type="article_summary", max_tokens=500),
     "youtube_summary": AIRequestConfig(task_type="youtube_summary", max_tokens=300),
     "cursor_prompt": AIRequestConfig(task_type="cursor_prompt", max_tokens=1500),
@@ -66,10 +67,33 @@ class AIService:
         """Формирует короткий и читаемый title."""
         system_prompt = (
             "Сократи заголовок до короткого, понятного названия на русском. "
-            "Верни только одну строку без кавычек."
+            "Верни только одну строку без кавычек. "
+            "Требования к названию файла: только русские/латинские буквы, цифры, пробелы, дефисы; "
+            "без эмодзи; без символов / \\ : * ? \" < > |; максимум 50 символов."
         )
         user_prompt = f"Сырой заголовок: {raw_title}\nКонтекст:\n{content}"
         return await self._cached_completion("short_title", system_prompt, user_prompt)
+
+    async def generate_task_slug(self, title: str, description: str, project_name: str = "") -> str:
+        """Генерирует осмысленный slug имени файла задачи."""
+        system_prompt = (
+            "Сгенерируй короткое имя файла (slug) для задачи в Obsidian.\n"
+            "Требования:\n"
+            "- Отражает суть задачи (не просто глагол)\n"
+            "- Если есть проект — можно добавить короткое упоминание контекста\n"
+            "- Только строчные буквы, цифры, дефисы\n"
+            "- БЕЗ эмодзи, БЕЗ пробелов\n"
+            "- БЕЗ символов: / \\ : * ? \" < > |\n"
+            "- Максимум 50 символов\n"
+            "- На русском языке (транслитерация не нужна)\n"
+            "Верни только slug одной строкой, без кавычек и пояснений."
+        )
+        user_prompt = (
+            f"Название задачи: {title}\n"
+            f"Проект: {project_name or 'без проекта'}\n"
+            f"Описание:\n{description}"
+        )
+        return await self._cached_completion("task_slug", system_prompt, user_prompt)
 
     async def generate_task_tags_and_links(
         self,

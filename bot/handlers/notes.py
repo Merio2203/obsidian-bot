@@ -15,6 +15,7 @@ from telegram.ext import (
     filters,
 )
 
+from bot.config import VAULT_FOLDERS
 from bot.database import SessionLocal
 from bot.database.crud import create_note
 from bot.services.ai_service import AIService
@@ -126,7 +127,7 @@ async def save_note_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return NOTE_TEXT
 
     title = _extract_title(content)
-    folder = "💡 Идеи" if note_type == "idea" else "📥 Входящие"
+    folder = VAULT_FOLDERS["ideas"] if note_type == "idea" else VAULT_FOLDERS["inbox"]
 
     ai = AIService(SessionLocal)
     obsidian = ObsidianService()
@@ -148,7 +149,7 @@ async def save_note_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     except Exception:
         logger.error("Не удалось сгенерировать AI-links для заметки", exc_info=True)
 
-    filename = f"{obsidian.sanitize_filename(title)}.md"
+    filename = f"{obsidian.slugify_filename(title)}.md"
     relative_path = f"{folder}/{filename}"
     markdown = render_note_markdown(
         title=title,

@@ -7,10 +7,11 @@ import logging
 import os
 import re
 import tempfile
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
-from bot.config import settings
+from bot.config import VAULT_FOLDERS, settings
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class WriteResult:
 class ObsidianService:
     """Единая точка работы с файлами vault + синхронизацией."""
 
-    REQUIRED_DIRS = ("📁 Проекты", "📓 Дневник", "💡 Идеи", "📚 Ресурсы", "📥 Входящие")
+    REQUIRED_DIRS = tuple(VAULT_FOLDERS.values())
 
     def __init__(self, vault_path: Path | None = None) -> None:
         self.vault_path = vault_path or settings.vault_path
@@ -39,8 +40,16 @@ class ObsidianService:
             await asyncio.to_thread(directory.mkdir, parents=True, exist_ok=True)
 
         # Вложенные папки раздела ресурсов.
-        await asyncio.to_thread((self.vault_path / "📚 Ресурсы" / "Статьи").mkdir, parents=True, exist_ok=True)
-        await asyncio.to_thread((self.vault_path / "📚 Ресурсы" / "Видео").mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(
+            (self.vault_path / VAULT_FOLDERS["resources"] / "Статьи").mkdir,
+            parents=True,
+            exist_ok=True,
+        )
+        await asyncio.to_thread(
+            (self.vault_path / VAULT_FOLDERS["resources"] / "Видео").mkdir,
+            parents=True,
+            exist_ok=True,
+        )
 
     async def write_markdown(self, relative_path: str | Path, content: str) -> WriteResult:
         """
@@ -71,15 +80,15 @@ class ObsidianService:
         Используется как контекст для генерации корректных Obsidian wikilinks.
         """
         folder_map = {
-            "project": "📁 Проекты",
-            "projects": "📁 Проекты",
-            "task": "📁 Проекты",
-            "tasks": "📁 Проекты",
-            "diary": "📓 Дневник",
-            "resource": "📚 Ресурсы",
-            "resources": "📚 Ресурсы",
-            "idea": "💡 Идеи",
-            "inbox": "📥 Входящие",
+            "project": VAULT_FOLDERS["projects"],
+            "projects": VAULT_FOLDERS["projects"],
+            "task": VAULT_FOLDERS["projects"],
+            "tasks": VAULT_FOLDERS["projects"],
+            "diary": VAULT_FOLDERS["diary"],
+            "resource": VAULT_FOLDERS["resources"],
+            "resources": VAULT_FOLDERS["resources"],
+            "idea": VAULT_FOLDERS["ideas"],
+            "inbox": VAULT_FOLDERS["inbox"],
             "note": None,
             "notes": None,
             "all": None,
@@ -97,11 +106,30 @@ class ObsidianService:
 
     @staticmethod
     def sanitize_filename(name: str) -> str:
-        """Создает безопасное имя файла."""
-        sanitized = re.sub(r"[\\/:*?\"<>|]", "", name.strip())
-        sanitized = re.sub(r"\s+", "-", sanitized)
-        sanitized = re.sub(r"-{2,}", "-", sanitized)
-        return sanitized.strip("-").lower() or "untitled"
+        """
+        Убирает эмодзи и спецсимволы из имени файла/папки.
+        Оставляет буквы, цифры, пробел, дефис, точку и скобки.
+        """
+        cleaned = "".join(
+            c
+            for c in name
+            if unicodedata.category(c) not in ("So", "Cs") and ord(c) < 0x10000
+        )
+        cleaned = re.sub(r"[\\/:*?\"<>|]", "", cleaned)
+        cleaned = re.sub(r"[^\w .()\-А-Яа-яЁё]", " ", cleaned, flags=re.UNICODE)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        return cleaned or "untitled"
+
+    @classmethod
+    def slugify_filename(cls, name: str, max_length: int = 50) -> str:
+        """Готовит короткий slug для имени файла: строчные буквы, цифры, дефисы."""
+        sanitized = cls.sanitize_filename(name).lower()
+        slug = re.sub(r"\s+", "-", sanitized)
+        slug = re.sub(r"[^a-zа-яё0-9\-]", "-", slug)
+        slug = re.sub(r"-{2,}", "-", slug).strip("-")
+        if len(slug) > max_length:
+            slug = slug[:max_length].rstrip("-")
+        return slug or "untitled"
 
     async def sync_to_dropbox(self) -> tuple[bool, str | None]:
         """Запускает rclone sync для vault."""

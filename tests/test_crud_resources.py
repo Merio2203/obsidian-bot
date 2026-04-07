@@ -23,7 +23,7 @@ async def test_create_resource() -> None:
                 url="https://youtu.be/test",
                 resource_type="youtube",
                 tags="architecture,backend",
-                obsidian_path="📚 Ресурсы/Видео/video.md",
+                obsidian_path="Ресурсы/Видео/video.md",
             )
             assert resource.id > 0
             assert resource.type == "youtube"

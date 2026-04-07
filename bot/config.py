@@ -8,6 +8,16 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+VAULT_FOLDERS: dict[str, str] = {
+    "projects": "Проекты",
+    "diary": "Дневник",
+    "ideas": "Идеи",
+    "resources": "Ресурсы",
+    "inbox": "Входящие",
+}
+
+PROJECT_SUBFOLDERS: tuple[str, str] = ("Задачи", "Ресурсы")
+
 
 @dataclass(frozen=True)
 class Settings:

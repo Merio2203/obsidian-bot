@@ -21,12 +21,12 @@ async def test_create_and_get_diary_entry() -> None:
             created = await create_diary_entry(
                 session=session,
                 entry_date=date(2026, 4, 6),
-                obsidian_path="📓 Дневник/2026-04-06.md",
+                obsidian_path="Дневник/2026-04-06.md",
             )
             assert created.id > 0
 
             loaded = await get_diary_entry_by_date(session, date(2026, 4, 6))
             assert loaded is not None
-            assert loaded.obsidian_path == "📓 Дневник/2026-04-06.md"
+            assert loaded.obsidian_path == "Дневник/2026-04-06.md"
 
         await engine.dispose()
