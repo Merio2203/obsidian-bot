@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 
 from bot.handlers.tasks import _normalize_links, _normalize_tags, _parse_deadline, _parse_estimate
-from bot.utils.formatters import render_task_markdown
+from bot.utils.formatters import format_wikilinks_for_yaml, render_task_markdown
 
 
 def test_parse_deadline_valid() -> None:
@@ -30,6 +30,10 @@ def test_parse_estimate() -> None:
 def test_normalize_tags_and_links() -> None:
     assert _normalize_tags(["#Python", "backend api", "python"]) == ["python", "backend-api"]
     assert _normalize_links(["Проект А", "[[Проект Б]]"]) == ["[[Проект А]]", "[[Проект Б]]"]
+    assert _normalize_links(["Проект Сайт.md", "[Сайт](📁 Проекты/Проект Сайт.md)"]) == [
+        "[[Проект Сайт]]",
+        "[[Проект Сайт|Сайт]]",
+    ]
 
 
 def test_render_task_markdown() -> None:
@@ -47,4 +51,12 @@ def test_render_task_markdown() -> None:
     assert "title: Сделать API" in markdown
     assert "project: CRM" in markdown
     assert "tags: [backend, api]" in markdown
-    assert "links: [[[CRM]], [[Сделать API]]]" in markdown
+    assert '  - "[[CRM]]"' in markdown
+    assert '  - "[[Сделать API]]"' in markdown
+
+
+def test_format_wikilinks_for_yaml() -> None:
+    block = format_wikilinks_for_yaml(["Проект Сайт.md", "[[2026-03-27|Дневник]]"])
+    assert block.startswith("links:\n")
+    assert '  - "[[Проект Сайт]]"' in block
+    assert '  - "[[2026-03-27|Дневник]]"' in block

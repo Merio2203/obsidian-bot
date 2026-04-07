@@ -65,37 +65,35 @@ class ObsidianService:
         new_content = f"{current.rstrip()}\n\n{append_text.strip()}\n"
         return await self.write_markdown(relative_path, new_content)
 
-    async def get_existing_links(self, content_type: str) -> list[str]:
+    async def get_existing_links(self, content_type: str | None = None) -> list[str]:
         """
-        Сканирует vault и возвращает список существующих названий файлов
-        по типу контента (проекты, задачи, ресурсы и т.д.)
-        для передачи в AI как контекст при генерации wiki-links.
+        Возвращает список имён файлов vault без расширения .md.
+        Используется как контекст для генерации корректных Obsidian wikilinks.
         """
-        mapping = {
-            "projects": "📁 Проекты/**/*.md",
-            "tasks": "📁 Проекты/**/✅ Задачи/*.md",
-            "resources": "📚 Ресурсы/**/*.md",
-            "diary": "📓 Дневник/*.md",
-            "notes": "{💡 Идеи,📥 Входящие}/*.md",
-            "all": "**/*.md",
+        folder_map = {
+            "project": "📁 Проекты",
+            "projects": "📁 Проекты",
+            "task": "📁 Проекты",
+            "tasks": "📁 Проекты",
+            "diary": "📓 Дневник",
+            "resource": "📚 Ресурсы",
+            "resources": "📚 Ресурсы",
+            "idea": "💡 Идеи",
+            "inbox": "📥 Входящие",
+            "note": None,
+            "notes": None,
+            "all": None,
         }
-        pattern = mapping.get(content_type, mapping["all"])
 
-        if "{" in pattern:
-            # Ручная обработка brace-формата для pathlib.
-            patterns = ["💡 Идеи/*.md", "📥 Входящие/*.md"]
-            files = []
-            for p in patterns:
-                files.extend(await asyncio.to_thread(lambda pp=p: list(self.vault_path.glob(pp))))
-        else:
-            files = await asyncio.to_thread(lambda: list(self.vault_path.glob(pattern)))
+        folder = folder_map.get(content_type or "all")
+        search_path = self.vault_path / folder if folder else self.vault_path
 
-        names = []
-        for file_path in files:
-            if file_path.is_file():
-                names.append(file_path.stem)
-        names_sorted = sorted(set(names))
-        return names_sorted[:1000]
+        if not await asyncio.to_thread(search_path.exists):
+            return []
+
+        files = await asyncio.to_thread(lambda: list(search_path.rglob("*.md")))
+        names = sorted({file_path.stem for file_path in files if file_path.is_file()})
+        return names[:1000]
 
     @staticmethod
     def sanitize_filename(name: str) -> str:

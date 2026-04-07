@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 
 def now_human() -> str:
@@ -13,6 +14,43 @@ def now_human() -> str:
 def today_iso() -> str:
     """Текущая дата в ISO-формате."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def format_wikilinks_for_yaml(links: list[str]) -> str:
+    """
+    Формирует YAML-блок links в корректном формате Obsidian.
+
+    Принимает как имена файлов, так и готовые wikilinks.
+    """
+    formatted: list[str] = []
+    for raw_link in links:
+        link = raw_link.strip()
+        if not link:
+            continue
+
+        if link.startswith("[") and "](" in link and link.endswith(")"):
+            label = link[1 : link.index("]")]
+            target = link[link.index("](") + 2 : -1]
+            target_name = Path(target).stem
+            link = f"[[{target_name}|{label}]]" if label and label != target_name else f"[[{target_name}]]"
+        else:
+            if link.startswith("[[") and link.endswith("]]"):
+                inner = link[2:-2].strip()
+            else:
+                inner = link.strip("[]")
+            target_part, sep, alias = inner.partition("|")
+            target_name = Path(target_part).name
+            if target_name.endswith(".md"):
+                target_name = target_name[:-3]
+            link = f"[[{target_name}|{alias.strip()}]]" if sep and alias.strip() else f"[[{target_name}]]"
+
+        if link not in formatted:
+            formatted.append(link)
+
+    if not formatted:
+        return "links: []"
+    rows = [f'  - "{item}"' for item in formatted]
+    return "links:\n" + "\n".join(rows)
 
 
 def render_project_overview_markdown(
@@ -65,7 +103,7 @@ def render_task_markdown(
     deadline_line = deadline_iso or ""
     estimated_line = "" if estimated_time is None else str(estimated_time)
     tags_line = ", ".join(tags)
-    links_line = ", ".join(links)
+    links_block = format_wikilinks_for_yaml(links)
 
     return (
         "---\n"
@@ -78,7 +116,7 @@ def render_task_markdown(
         f"estimated_time: {estimated_line}\n"
         f"created: {created_at}\n"
         f"tags: [{tags_line}]\n"
-        f"links: [{links_line}]\n"
+        f"{links_block}\n"
         f"google_calendar_id: {google_calendar_id}\n"
         "---\n\n"
         "## 📋 Описание\n"
@@ -128,13 +166,13 @@ def render_note_markdown(
     """Формирует markdown для быстрой заметки/идеи."""
     saved = today_iso()
     tags_line = ", ".join(tags)
-    links_line = ", ".join(links or [])
+    links_block = format_wikilinks_for_yaml(links or [])
     return (
         "---\n"
         f"title: {title}\n"
         f"type: {note_type}\n"
         f"tags: [{tags_line}]\n"
-        f"links: [{links_line}]\n"
+        f"{links_block}\n"
         f"saved: {saved}\n"
         "---\n\n"
         "## 📝 Содержание\n"
@@ -154,7 +192,7 @@ def render_resource_markdown(
     """Формирует markdown для сохраненного ресурса."""
     saved = today_iso()
     tags_line = ", ".join(tags)
-    links_line = ", ".join(links or [])
+    links_block = format_wikilinks_for_yaml(links or [])
     points = "\n".join([f"- {point}" for point in key_points]) if key_points else "- Уточнить ключевые мысли"
     return (
         "---\n"
@@ -162,7 +200,7 @@ def render_resource_markdown(
         f"url: {url}\n"
         f"type: {resource_type}\n"
         f"tags: [{tags_line}]\n"
-        f"links: [{links_line}]\n"
+        f"{links_block}\n"
         f"saved: {saved}\n"
         "---\n\n"
         "## 📝 Резюме\n"

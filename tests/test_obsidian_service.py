@@ -36,6 +36,10 @@ async def test_get_existing_links(tmp_path: Path) -> None:
     assert "📋 Обзор" in links
     assert "заметка" in links
 
+    project_links = await service.get_existing_links("project")
+    assert "📋 Обзор" in project_links
+    assert "заметка" not in project_links
+
 
 def test_sanitize_filename() -> None:
     assert ObsidianService.sanitize_filename("  Тест: идея / 2026  ") == "тест-идея-2026"

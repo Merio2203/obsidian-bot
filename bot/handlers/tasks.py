@@ -102,9 +102,24 @@ def _normalize_links(raw: list[str] | str | None) -> list[str]:
     for item in source:
         if not item:
             continue
-        token = item
-        if not token.startswith("[["):
-            token = f"[[{token.strip('[]')}]]"
+        token = item.strip()
+        if token.startswith("[") and "](" in token and token.endswith(")"):
+            label = token[1 : token.index("]")]
+            target = token[token.index("](") + 2 : -1].strip()
+            target = target.split("/")[-1]
+            if target.endswith(".md"):
+                target = target[:-3]
+            token = f"[[{target}|{label}]]" if label and label != target else f"[[{target}]]"
+        else:
+            if token.startswith("[[") and token.endswith("]]"):
+                inner = token[2:-2].strip()
+            else:
+                inner = token.strip("[]")
+            target_part, sep, alias = inner.partition("|")
+            target = target_part.split("/")[-1].strip()
+            if target.endswith(".md"):
+                target = target[:-3]
+            token = f"[[{target}|{alias.strip()}]]" if sep and alias.strip() else f"[[{target}]]"
         if token not in links:
             links.append(token)
     return links[:8]

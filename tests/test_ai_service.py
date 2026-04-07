@@ -41,3 +41,28 @@ async def test_ai_service_uses_max_tokens_and_cache() -> None:
         assert fake_create.calls[0]["max_tokens"] == 80
 
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_ai_service_includes_wikilink_rules_in_prompt() -> None:
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        engine = create_async_engine(f"sqlite+aiosqlite:///{tmp.name}")
+        await init_db(engine)
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        service = AIService(session_factory)
+
+        fake_create = FakeCreate()
+        service._client = SimpleNamespace(chat=SimpleNamespace(completions=fake_create))  # type: ignore[attr-defined]
+
+        await service.generate_links_for_content(
+            content_type="resource",
+            text="Тест",
+            existing_links=["Проект Сайт", "2026-03-27"],
+        )
+
+        system_prompt = fake_create.calls[0]["messages"][0]["content"]
+        assert "НЕ используй markdown-ссылки" in system_prompt
+        assert "НЕ добавляй расширение .md" in system_prompt
+        assert "ТОЛЬКО имена из предоставленного списка" in system_prompt
+
+        await engine.dispose()
