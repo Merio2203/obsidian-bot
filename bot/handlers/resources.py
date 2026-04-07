@@ -23,6 +23,7 @@ from bot.services.obsidian_service import ObsidianService
 from bot.services.parser_service import ParserService
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_resource_markdown
+from bot.utils.helpers import edit_or_send
 from bot.utils.keyboards import get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
@@ -211,16 +212,20 @@ async def resources_action_callback(update: Update, context: ContextTypes.DEFAUL
         return
     resource_id = parts[2] if len(parts) > 2 else "?"
     if action == "to_task":
-        await query.message.reply_text(
+        await edit_or_send(
+            update,
+            context,
             f"Нажми кнопку ✅ Задачи, чтобы создать задачу по ресурсу #{resource_id}.",
-            reply_markup=get_main_menu_keyboard(),
         )
+        await query.message.reply_text("Главное меню", reply_markup=get_main_menu_keyboard())
         return
     if action == "to_project":
-        await query.message.reply_text(
+        await edit_or_send(
+            update,
+            context,
             f"Нажми кнопку 📁 Проекты, чтобы создать проект по ресурсу #{resource_id}.",
-            reply_markup=get_main_menu_keyboard(),
         )
+        await query.message.reply_text("Главное меню", reply_markup=get_main_menu_keyboard())
         return
 
 

@@ -15,10 +15,12 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not update.effective_message:
         return
 
-    await update.effective_message.reply_text(
+    msg = await update.effective_message.reply_text(
         "Привет! Я ваш Obsidian AI-ассистент.\nВыберите нужный раздел в меню ниже.",
         reply_markup=get_main_menu_keyboard(),
     )
+    if context and msg and getattr(msg, "message_id", None) is not None:
+        context.user_data["menu_message_id"] = msg.message_id
 
 
 @owner_only
@@ -27,7 +29,6 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not update.effective_message or not update.effective_message.text:
         return
 
-    # Fallback не используется; оставлен как безопасная заглушка.
     return
 
 

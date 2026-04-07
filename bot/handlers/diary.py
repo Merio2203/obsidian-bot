@@ -26,6 +26,7 @@ from bot.services.obsidian_service import ObsidianService
 from bot.services.settings_service import SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_diary_markdown
+from bot.utils.helpers import edit_or_send
 from bot.utils.keyboards import (
     get_diary_edit_sections_keyboard,
     get_diary_existing_entry_keyboard,
@@ -137,21 +138,24 @@ async def diary_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         obsidian = ObsidianService()
         try:
             content = await obsidian.read_markdown(path)
-            await query.message.reply_text(content[:3500], reply_markup=get_main_menu_keyboard())
+            await edit_or_send(update, context, content[:3500], reply_markup=get_diary_existing_entry_keyboard())
         except Exception:
             logger.error("Ошибка чтения дневника", exc_info=True)
-            await query.message.reply_text("Не удалось прочитать запись дневника.", reply_markup=get_main_menu_keyboard())
+            await edit_or_send(update, context, "Не удалось прочитать запись дневника.")
         return ConversationHandler.END
 
     if data == "diary:edit":
-        await query.message.reply_text(
+        await edit_or_send(
+            update,
+            context,
             "Какой раздел хочешь отредактировать?",
             reply_markup=get_diary_edit_sections_keyboard(),
         )
         return DIARY_EDIT_CHOOSE_SECTION
 
     if data == "diary:back":
-        await query.message.reply_text("Возвращаю в главное меню.", reply_markup=get_main_menu_keyboard())
+        await edit_or_send(update, context, "Возвращаю в главное меню.")
+        await query.message.reply_text("Главное меню", reply_markup=get_main_menu_keyboard())
         return ConversationHandler.END
 
     return DIARY_ACTION
@@ -167,13 +171,13 @@ async def diary_edit_choose_section(update: Update, context: ContextTypes.DEFAUL
     data = query.data or ""
     parts = data.split(":")
     if len(parts) != 3 or parts[0] != "diary" or parts[1] != "edit_section":
-        await query.message.reply_text("Не удалось определить раздел. Выбери снова.")
+        await edit_or_send(update, context, "Не удалось определить раздел. Выбери снова.")
         return DIARY_EDIT_CHOOSE_SECTION
 
     section_key = parts[2]
     section_title = DIARY_SECTIONS.get(section_key)
     if not section_title:
-        await query.message.reply_text("Неизвестный раздел.")
+        await edit_or_send(update, context, "Неизвестный раздел.")
         return DIARY_EDIT_CHOOSE_SECTION
 
     path = context.user_data.get("diary_path", _diary_relative_path(await _today_iso()))
@@ -183,13 +187,15 @@ async def diary_edit_choose_section(update: Update, context: ContextTypes.DEFAUL
         current = _extract_section_content(content, section_title)
     except Exception:
         logger.error("Ошибка чтения раздела дневника", exc_info=True)
-        await query.message.reply_text("Не удалось прочитать дневник для редактирования.")
+        await edit_or_send(update, context, "Не удалось прочитать дневник для редактирования.")
         return ConversationHandler.END
 
     context.user_data["diary_edit_section_key"] = section_key
     context.user_data["diary_edit_section_title"] = section_title
     shown = current if current else "(раздел пока пуст)"
-    await query.message.reply_text(
+    await edit_or_send(
+        update,
+        context,
         f'Текущее содержимое раздела "{section_title}". Отправь новый текст для замены:\n\n{shown[:2500]}'
     )
     return DIARY_EDIT_INPUT_TEXT

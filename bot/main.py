@@ -20,7 +20,7 @@ from bot.handlers.settings import register_settings_handlers
 from bot.handlers.tasks import register_tasks_handlers
 from bot.handlers.today import register_today_handlers
 from bot.services.ai_service import AIService
-from bot.services.obsidian_service import ObsidianService
+from bot.services.obsidian_service import ObsidianService, sync_db_with_vault
 from bot.utils.logger import setup_logger
 
 
@@ -29,6 +29,7 @@ async def on_startup() -> None:
     await init_db(engine)
     obsidian = ObsidianService()
     await obsidian.ensure_dirs()
+    await sync_db_with_vault()
     _ = AIService(SessionLocal)
 
 

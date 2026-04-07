@@ -33,6 +33,7 @@ from bot.services.obsidian_service import ObsidianService
 from bot.services.settings_service import SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_task_markdown
+from bot.utils.helpers import edit_or_send
 from bot.utils.keyboards import (
     get_main_menu_keyboard,
     get_task_actions_keyboard,
@@ -141,7 +142,9 @@ async def tasks_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     """Точка входа раздела задач."""
     if not update.effective_message:
         return ConversationHandler.END
-    await update.effective_message.reply_text(
+    await edit_or_send(
+        update,
+        context,
         "Раздел задач.\nВыберите действие:",
         reply_markup=get_tasks_menu_keyboard(),
     )
@@ -158,49 +161,56 @@ async def tasks_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     data = query.data or ""
 
     if data == "tasks:create":
-        await _ask_project_selection(query.message)
+        await _ask_project_selection(update, context)
         return TASK_PROJECT
 
     if data == "tasks:list":
-        await _send_tasks_list(query.message)
+        await _send_tasks_list(update, context)
         return TASK_MENU
 
     if data == "tasks:back":
-        await query.message.reply_text(
+        await edit_or_send(
+            update,
+            context,
             "Возвращаю в главное меню.",
-            reply_markup=get_main_menu_keyboard(),
         )
+        await query.message.reply_text("Главное меню", reply_markup=get_main_menu_keyboard())
         return ConversationHandler.END
 
     if data.startswith("tasks:open:"):
         task_id = int(data.split(":")[-1])
-        await _send_task_card(query.message, task_id)
+        await _send_task_card(update, context, task_id)
         return TASK_MENU
 
     if data.startswith("tasks:status:"):
         task_id = int(data.split(":")[-1])
-        await query.message.reply_text("Выберите новый статус:", reply_markup=get_task_status_keyboard(task_id))
+        await edit_or_send(
+            update,
+            context,
+            "Выберите новый статус:",
+            reply_markup=get_task_status_keyboard(task_id),
+        )
         return TASK_MENU
 
     if data.startswith("tasks:set_status:"):
         parts = data.split(":")
         if len(parts) != 4:
-            await query.message.reply_text("Не удалось разобрать команду смены статуса.")
+            await edit_or_send(update, context, "Не удалось разобрать команду смены статуса.")
             return TASK_MENU
         _, _, task_id_raw, status_key = parts
         task_id = int(task_id_raw)
         new_status = TASK_STATUS_MAP.get(status_key)
         if not new_status:
-            await query.message.reply_text("Неизвестный статус.")
+            await edit_or_send(update, context, "Неизвестный статус.")
             return TASK_MENU
-        await _set_task_status(query.message, task_id, new_status)
+        await _set_task_status(update, context, task_id, new_status)
         return TASK_MENU
 
     if data.startswith("tasks:project:"):
         project_raw = data.split(":", 2)[-1]
         project_id = None if project_raw == "none" else int(project_raw)
         context.user_data["task_project_id"] = project_id
-        await query.message.reply_text("Введите название задачи:")
+        await edit_or_send(update, context, "Введите название задачи:")
         return TASK_TITLE
 
     return TASK_MENU
@@ -440,7 +450,7 @@ async def cancel_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return ConversationHandler.END
 
 
-async def _ask_project_selection(message) -> None:  # type: ignore[no-untyped-def]
+async def _ask_project_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     async with SessionLocal() as session:
         projects = await get_projects(session)
 
@@ -449,46 +459,53 @@ async def _ask_project_selection(message) -> None:  # type: ignore[no-untyped-de
         rows.append([InlineKeyboardButton(project.name, callback_data=f"tasks:project:{project.id}")])
     rows.append([InlineKeyboardButton("Без проекта", callback_data="tasks:project:none")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="tasks:back")])
-    await message.reply_text("Выберите проект для задачи:", reply_markup=InlineKeyboardMarkup(rows))
+    await edit_or_send(update, context, "Выберите проект для задачи:", reply_markup=InlineKeyboardMarkup(rows))
 
 
-async def _send_tasks_list(message) -> None:  # type: ignore[no-untyped-def]
+async def _send_tasks_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     async with SessionLocal() as session:
         tasks = await get_tasks(session)
 
     if not tasks:
-        await message.reply_text("Пока нет задач. Нажмите «➕ Создать задачу».")
+        await edit_or_send(update, context, "Пока нет задач. Нажмите «➕ Создать задачу».")
         return
 
     rows = []
     for task in tasks[:20]:
         rows.append([InlineKeyboardButton(f"{task.status} {task.title}", callback_data=f"tasks:open:{task.id}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="tasks:back")])
-    await message.reply_text("Список задач:", reply_markup=InlineKeyboardMarkup(rows))
+    await edit_or_send(update, context, "Список задач:", reply_markup=InlineKeyboardMarkup(rows))
 
 
-async def _send_task_card(message, task_id: int) -> None:  # type: ignore[no-untyped-def]
+async def _send_task_card(update: Update, context: ContextTypes.DEFAULT_TYPE, task_id: int) -> None:
     async with SessionLocal() as session:
         task = await get_task_by_id(session, task_id)
     if not task:
-        await message.reply_text("Задача не найдена.")
+        await edit_or_send(update, context, "Задача не найдена.")
         return
-    await message.reply_text(
+    await edit_or_send(
+        update,
+        context,
         _task_text(task.id, task.title, task.status, task.priority, task.obsidian_path),
-        parse_mode="HTML",
         reply_markup=get_task_actions_keyboard(task.id),
     )
 
 
-async def _set_task_status(message, task_id: int, status: str) -> None:  # type: ignore[no-untyped-def]
+async def _set_task_status(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    task_id: int,
+    status: str,
+) -> None:
     async with SessionLocal() as session:
         task = await get_task_by_id(session, task_id)
         if not task:
-            await message.reply_text("Задача не найдена.")
+            await edit_or_send(update, context, "Задача не найдена.")
             return
         await update_task_status(session, task, status)
-    await message.reply_text(f"Статус задачи обновлён: {status}")
-    await _send_task_card(message, task_id)
+    if update.callback_query:
+        await update.callback_query.answer(f"Статус обновлён: {status}", show_alert=False)
+    await _send_task_card(update, context, task_id)
 
 
 def register_tasks_handlers(application: Application) -> None:

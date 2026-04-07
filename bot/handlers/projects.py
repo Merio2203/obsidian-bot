@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import asyncio
+import logging
+import re
 from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError
@@ -18,24 +19,14 @@ from telegram.ext import (
     filters,
 )
 
-from bot.database import SessionLocal
-from bot.database.crud import (
-    create_project,
-    get_project_by_id,
-    get_project_by_name,
-    get_projects,
-    update_project_status,
-)
 from bot.config import PROJECT_SUBFOLDERS, VAULT_FOLDERS
-from bot.services.obsidian_service import ObsidianService
+from bot.database import SessionLocal
+from bot.database.crud import create_project, get_project_by_name
+from bot.services.obsidian_service import ObsidianService, sync_db_with_vault
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_project_overview_markdown
-from bot.utils.keyboards import (
-    get_main_menu_keyboard,
-    get_project_actions_keyboard,
-    get_projects_menu_keyboard,
-    get_project_status_keyboard,
-)
+from bot.utils.helpers import edit_or_send
+from bot.utils.keyboards import get_main_menu_keyboard, get_projects_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +38,7 @@ STATUS_MAP = {
     "done": "🟢 Завершён",
 }
 
+
 def _project_text(name: str, status: str, stack: str, repo_url: str | None, obsidian_path: str) -> str:
     return (
         f"📁 <b>{name}</b>\n"
@@ -57,12 +49,41 @@ def _project_text(name: str, status: str, stack: str, repo_url: str | None, obsi
     )
 
 
+def _build_project_actions_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("✅ Задачи проекта", callback_data="projects:tasks_current")],
+            [InlineKeyboardButton("🔄 Изменить статус", callback_data="projects:status_current")],
+            [InlineKeyboardButton("🗃 Архивировать", callback_data="projects:archive_current")],
+            [InlineKeyboardButton("⬅️ К списку", callback_data="projects:list")],
+        ]
+    )
+
+
+def _build_status_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🟡 Активный", callback_data="projects:set_status:active")],
+            [InlineKeyboardButton("⏸ На паузе", callback_data="projects:set_status:paused")],
+            [InlineKeyboardButton("🟢 Завершён", callback_data="projects:set_status:done")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="projects:list")],
+        ]
+    )
+
+
+def _extract_yaml_value(content: str, key: str) -> str:
+    match = re.search(rf"^{re.escape(key)}:\s*(.+)$", content, re.MULTILINE)
+    return match.group(1).strip() if match else ""
+
+
 @owner_only
 async def projects_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Точка входа в раздел проектов по кнопке меню."""
     if not update.effective_message:
         return ConversationHandler.END
-    await update.effective_message.reply_text(
+    await edit_or_send(
+        update,
+        context,
         "Раздел проектов.\nВыберите действие:",
         reply_markup=get_projects_menu_keyboard(),
     )
@@ -74,59 +95,59 @@ async def projects_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
     """Обработка inline-кнопок меню проектов."""
     if not update.callback_query:
         return PROJECT_MENU
-    query = update.callback_query
-    await query.answer()
+    try:
+        await update.callback_query.answer()
+    except Exception:
+        logger.debug("Не удалось ответить на callback в projects_menu_callback", exc_info=True)
+    data = update.callback_query.data or ""
 
-    data = query.data or ""
     if data == "projects:create":
-        await query.message.reply_text("Введите название проекта:")
+        await edit_or_send(update, context, "Введите название проекта:")
         return CREATE_NAME
 
     if data == "projects:list":
-        await _send_projects_list(query.message, include_hint=False)
+        await _send_projects_list(update, context, include_hint=False)
         return PROJECT_MENU
 
     if data == "projects:back":
-        await query.message.reply_text(
-            "Возвращаю в главное меню.",
-            reply_markup=get_main_menu_keyboard(),
+        await update.callback_query.answer("Возвращаю в главное меню.", show_alert=False)
+        await edit_or_send(
+            update,
+            context,
+            "Главное меню",
+            reply_markup=None,
         )
+        if update.callback_query.message:
+            await update.callback_query.message.reply_text(
+                "Главное меню",
+                reply_markup=get_main_menu_keyboard(),
+            )
         return ConversationHandler.END
 
     if data.startswith("projects:open:"):
-        project_id = int(data.split(":")[-1])
-        await _send_project_card(query.message, project_id)
+        idx = data.split(":")[-1]
+        await _send_project_card(update, context, idx)
         return PROJECT_MENU
 
-    if data.startswith("projects:status:"):
-        project_id = int(data.split(":")[-1])
-        await query.message.reply_text(
-            "Выберите новый статус:",
-            reply_markup=get_project_status_keyboard(project_id),
-        )
+    if data == "projects:status_current":
+        await edit_or_send(update, context, "Выберите новый статус:", reply_markup=_build_status_keyboard())
         return PROJECT_MENU
 
     if data.startswith("projects:set_status:"):
-        parts = data.split(":")
-        if len(parts) != 4:
-            await query.message.reply_text("Не удалось разобрать команду смены статуса.")
-            return PROJECT_MENU
-        _, _, project_id_raw, status_key = parts
-        project_id = int(project_id_raw)
+        status_key = data.split(":")[-1]
         status = STATUS_MAP.get(status_key)
         if not status:
-            await query.message.reply_text("Неизвестный статус.")
+            await update.callback_query.answer("Неизвестный статус", show_alert=True)
             return PROJECT_MENU
-        await _set_project_status(query.message, project_id, status)
+        await _set_project_status(update, context, status)
         return PROJECT_MENU
 
-    if data.startswith("projects:archive:"):
-        project_id = int(data.split(":")[-1])
-        await _set_project_status(query.message, project_id, "🗄 Архив")
+    if data == "projects:archive_current":
+        await _set_project_status(update, context, "🗄 Архив")
         return PROJECT_MENU
 
-    if data.startswith("projects:tasks:"):
-        await query.message.reply_text("Раздел задач проекта подключим следующим шагом.")
+    if data == "projects:tasks_current":
+        await update.callback_query.answer("Раздел задач проекта подключим следующим шагом.", show_alert=False)
         return PROJECT_MENU
 
     return PROJECT_MENU
@@ -195,9 +216,7 @@ async def create_project_repo(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     obsidian = ObsidianService()
     project_dir = obsidian.sanitize_filename(name)
-    overview_filename = f"Проект {name}"
-    overview_filename = f"{obsidian.sanitize_filename(overview_filename)}.md"
-    overview_relative = Path(VAULT_FOLDERS["projects"]) / project_dir / overview_filename
+    overview_relative = obsidian.get_project_overview_relative(name)
     markdown = render_project_overview_markdown(
         title=name,
         description=description or "Описание пока не добавлено.",
@@ -217,14 +236,14 @@ async def create_project_repo(update: Update, context: ContextTypes.DEFAULT_TYPE
         async with SessionLocal() as session:
             project = await create_project(
                 session=session,
-                name=name,
+                name=project_dir,
                 description=description,
                 stack=stack_db,
                 repo_url=repo_url,
                 obsidian_path=str(overview_relative),
             )
     except IntegrityError:
-        logger.warning("Проект с именем '%s' уже существует", name)
+        logger.warning("Проект с именем '%s' уже существует", project_dir)
         await update.effective_message.reply_text(
             "Проект с таким названием уже существует. Используйте другое имя."
         )
@@ -234,6 +253,7 @@ async def create_project_repo(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data.pop("project_description", None)
         context.user_data.pop("project_stack", None)
 
+    await sync_db_with_vault()
     sync_note = (
         "✅ Синхронизация с Dropbox выполнена."
         if write_result.synced
@@ -258,47 +278,100 @@ async def cancel_projects(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return ConversationHandler.END
 
 
-async def _send_projects_list(message, include_hint: bool = True) -> None:  # type: ignore[no-untyped-def]
-    async with SessionLocal() as session:
-        projects = await get_projects(session)
+async def _send_projects_list(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    include_hint: bool = True,
+) -> None:
+    obsidian = ObsidianService()
+    projects = await obsidian.get_projects_from_vault()
+    await sync_db_with_vault()
 
     if not projects:
-        await message.reply_text("Пока нет проектов. Нажмите «➕ Создать проект».")
+        await edit_or_send(
+            update,
+            context,
+            "Пока нет проектов. Нажмите «➕ Создать проект».",
+            reply_markup=get_projects_menu_keyboard(),
+        )
         return
 
+    context.user_data["projects_index"] = {str(i): p for i, p in enumerate(projects)}
     buttons = [
-        [InlineKeyboardButton(f"{project.status} {project.name}", callback_data=f"projects:open:{project.id}")]
-        for project in projects
+        [InlineKeyboardButton(f"{p['status']} {p['name']}", callback_data=f"projects:open:{i}")]
+        for i, p in enumerate(projects)
     ]
     buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="projects:back")])
     text = "Список проектов:"
     if include_hint:
         text += "\nВыберите проект из списка."
-    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    await edit_or_send(update, context, text, reply_markup=InlineKeyboardMarkup(buttons))
 
 
-async def _send_project_card(message, project_id: int) -> None:  # type: ignore[no-untyped-def]
-    async with SessionLocal() as session:
-        project = await get_project_by_id(session, project_id)
+async def _send_project_card(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    idx: str,
+) -> None:
+    index_map: dict[str, dict[str, str]] = context.user_data.get("projects_index", {})
+    project = index_map.get(idx)
     if not project:
-        await message.reply_text("Проект не найден.")
+        await edit_or_send(update, context, "Проект не найден. Обновите список.", reply_markup=get_projects_menu_keyboard())
         return
-    await message.reply_text(
-        _project_text(project.name, project.status, project.stack, project.repo_url, project.obsidian_path),
-        parse_mode="HTML",
-        reply_markup=get_project_actions_keyboard(project.id),
+
+    project_name = project["name"]
+    context.user_data["current_project_name"] = project_name
+
+    obsidian = ObsidianService()
+    overview_relative = obsidian.get_project_overview_relative(project_name)
+    overview_abs = obsidian.vault_path / overview_relative
+    stack = ""
+    repo_url = ""
+    if await asyncio.to_thread(overview_abs.exists):
+        content = await asyncio.to_thread(overview_abs.read_text, "utf-8")
+        stack = _extract_yaml_value(content, "stack")
+        repo_url = _extract_yaml_value(content, "repository")
+
+    await edit_or_send(
+        update,
+        context,
+        _project_text(
+            project_name,
+            project.get("status", "🟡 Активный"),
+            stack,
+            repo_url or None,
+            str(overview_relative),
+        ),
+        reply_markup=_build_project_actions_keyboard(),
     )
 
 
-async def _set_project_status(message, project_id: int, status: str) -> None:  # type: ignore[no-untyped-def]
-    async with SessionLocal() as session:
-        project = await get_project_by_id(session, project_id)
-        if not project:
-            await message.reply_text("Проект не найден.")
-            return
-        await update_project_status(session, project, status)
-    await message.reply_text(f"Статус проекта обновлён: {status}")
-    await _send_project_card(message, project_id)
+async def _set_project_status(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    status: str,
+) -> None:
+    project_name = context.user_data.get("current_project_name")
+    if not project_name:
+        await edit_or_send(update, context, "Сначала выберите проект из списка.", reply_markup=get_projects_menu_keyboard())
+        return
+
+    obsidian = ObsidianService()
+    overview_relative = obsidian.get_project_overview_relative(project_name)
+    overview_abs = obsidian.vault_path / overview_relative
+    if not await asyncio.to_thread(overview_abs.exists):
+        await edit_or_send(update, context, "Файл проекта не найден.", reply_markup=get_projects_menu_keyboard())
+        return
+
+    content = await asyncio.to_thread(overview_abs.read_text, "utf-8")
+    if re.search(r"^status:\s*.+$", content, re.MULTILINE):
+        updated = re.sub(r"^status:\s*.+$", f"status: {status}", content, flags=re.MULTILINE)
+    else:
+        updated = content
+    await obsidian.write_markdown(overview_relative, updated)
+    await sync_db_with_vault()
+    await update.callback_query.answer(f"Статус обновлён: {status}", show_alert=False)
+    await _send_projects_list(update, context, include_hint=False)
 
 
 def register_projects_handlers(application: Application) -> None:

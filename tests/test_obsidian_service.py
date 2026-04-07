@@ -41,6 +41,23 @@ async def test_get_existing_links(tmp_path: Path) -> None:
     assert "заметка" not in project_links
 
 
+@pytest.mark.asyncio
+async def test_get_projects_from_vault(tmp_path: Path) -> None:
+    service = ObsidianService(vault_path=tmp_path)
+    await service.ensure_dirs()
+    project_dir = tmp_path / "Проекты" / "Sever VPN"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "Проект Sever VPN.md").write_text(
+        "---\nstatus: 🟢 Завершён\n---\n",
+        encoding="utf-8",
+    )
+
+    projects = await service.get_projects_from_vault()
+    assert projects
+    assert projects[0]["name"] == "Sever VPN"
+    assert projects[0]["status"] == "🟢 Завершён"
+
+
 def test_sanitize_filename() -> None:
     assert ObsidianService.sanitize_filename("  🚀 Тест: идея / 2026  ") == "Тест идея 2026"
     assert ObsidianService.slugify_filename("  🚀 Тест: идея / 2026  ") == "тест-идея-2026"

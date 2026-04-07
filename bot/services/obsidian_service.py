@@ -104,6 +104,38 @@ class ObsidianService:
         names = sorted({file_path.stem for file_path in files if file_path.is_file()})
         return names[:1000]
 
+    async def get_projects_from_vault(self) -> list[dict[str, str]]:
+        """
+        Возвращает список проектов напрямую из файловой системы vault.
+        Источник истины для списка проектов — папки внутри `vault/Проекты`.
+        """
+        projects_path = self.vault_path / VAULT_FOLDERS["projects"]
+        if not await asyncio.to_thread(projects_path.exists):
+            return []
+
+        def _scan() -> list[dict[str, str]]:
+            items: list[dict[str, str]] = []
+            for item in sorted(projects_path.iterdir(), key=lambda p: p.name.lower()):
+                if not item.is_dir():
+                    continue
+                overview = item / f"Проект {item.name}.md"
+                status = "🟡 Активный"
+                if overview.exists():
+                    content = overview.read_text(encoding="utf-8")
+                    match = re.search(r"^status:\s*(.+)$", content, re.MULTILINE)
+                    if match:
+                        status = match.group(1).strip()
+                items.append({"name": item.name, "path": str(item), "status": status})
+            return items
+
+        return await asyncio.to_thread(_scan)
+
+    def get_project_overview_relative(self, project_name: str) -> Path:
+        """Возвращает относительный путь обзорного файла проекта."""
+        project_dir = self.sanitize_filename(project_name)
+        overview_name = self.sanitize_filename(f"Проект {project_name}")
+        return Path(VAULT_FOLDERS["projects"]) / project_dir / f"{overview_name}.md"
+
     @staticmethod
     def sanitize_filename(name: str) -> str:
         """
@@ -172,3 +204,55 @@ class ObsidianService:
         finally:
             if tmp_file and os.path.exists(tmp_file):
                 os.unlink(tmp_file)
+
+
+async def sync_db_with_vault() -> None:
+    """
+    Синхронизирует SQLite с фактическим состоянием vault.
+    - удаляет проекты/задачи, которых больше нет в файлах;
+    - добавляет проекты, найденные в vault, но отсутствующие в БД.
+    """
+    from sqlalchemy import select
+
+    from bot.database import SessionLocal
+    from bot.database.models import Project, Task
+
+    service = ObsidianService()
+    vault_projects = await service.get_projects_from_vault()
+    vault_project_names = {item["name"] for item in vault_projects}
+    vault_project_payload = {item["name"]: item for item in vault_projects}
+
+    async with SessionLocal() as session:
+        db_projects = list((await session.execute(select(Project))).scalars().all())
+        for project in db_projects:
+            if project.name not in vault_project_names:
+                await session.delete(project)
+
+        db_projects_after_delete = list((await session.execute(select(Project))).scalars().all())
+        existing_by_name = {p.name: p for p in db_projects_after_delete}
+
+        for project_name, payload in vault_project_payload.items():
+            overview_rel = str(service.get_project_overview_relative(project_name))
+            if project_name in existing_by_name:
+                existing = existing_by_name[project_name]
+                existing.status = payload.get("status", existing.status)
+                existing.obsidian_path = overview_rel
+            else:
+                session.add(
+                    Project(
+                        name=project_name,
+                        status=payload.get("status", "🟡 Активный"),
+                        stack="",
+                        repo_url=None,
+                        obsidian_path=overview_rel,
+                    )
+                )
+
+        db_tasks = list((await session.execute(select(Task))).scalars().all())
+        for task in db_tasks:
+            task_path = service.vault_path / task.obsidian_path
+            exists = await asyncio.to_thread(task_path.exists)
+            if not exists:
+                await session.delete(task)
+
+        await session.commit()

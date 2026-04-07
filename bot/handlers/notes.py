@@ -22,6 +22,7 @@ from bot.services.ai_service import AIService
 from bot.services.obsidian_service import ObsidianService
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_note_markdown
+from bot.utils.helpers import edit_or_send
 from bot.utils.keyboards import get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
@@ -191,21 +192,25 @@ async def notes_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
     data = query.data or ""
     parts = data.split(":")
     if len(parts) != 4:
-        await query.message.reply_text("Не удалось обработать действие.")
+        await edit_or_send(update, context, "Не удалось обработать действие.")
         return
     _, action, note_type, note_id = parts
 
     if action == "to_task":
-        await query.message.reply_text(
+        await edit_or_send(
+            update,
+            context,
             f"Открываю сценарий задачи для заметки #{note_id}. Нажми кнопку ✅ Задачи и создай задачу.",
-            reply_markup=get_main_menu_keyboard(),
         )
+        await query.message.reply_text("Главное меню", reply_markup=get_main_menu_keyboard())
         return
     if action == "to_project":
-        await query.message.reply_text(
+        await edit_or_send(
+            update,
+            context,
             f"Открываю сценарий проекта для заметки #{note_id}. Нажми кнопку 📁 Проекты и создай проект.",
-            reply_markup=get_main_menu_keyboard(),
         )
+        await query.message.reply_text("Главное меню", reply_markup=get_main_menu_keyboard())
         return
 
 

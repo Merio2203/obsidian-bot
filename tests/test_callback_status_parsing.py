@@ -37,7 +37,7 @@ class FakeUpdate:
 async def test_tasks_set_status_callback_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
     called = {"value": False}
 
-    async def fake_set_task_status(message, task_id: int, status: str) -> None:  # type: ignore[no-untyped-def]
+    async def fake_set_task_status(update, context, task_id: int, status: str) -> None:  # type: ignore[no-untyped-def]
         called["value"] = True
         assert task_id == 123
         assert status == "🔴 Новая"
@@ -56,15 +56,14 @@ async def test_tasks_set_status_callback_parsing(monkeypatch: pytest.MonkeyPatch
 async def test_projects_set_status_callback_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
     called = {"value": False}
 
-    async def fake_set_project_status(message, project_id: int, status: str) -> None:  # type: ignore[no-untyped-def]
+    async def fake_set_project_status(update, context, status: str) -> None:  # type: ignore[no-untyped-def]
         called["value"] = True
-        assert project_id == 55
         assert status == "🟡 Активный"
 
     monkeypatch.setattr(projects_module, "_set_project_status", fake_set_project_status)
 
-    update = FakeUpdate(user_id=42, data="projects:set_status:55:active")
-    context = types.SimpleNamespace(user_data={})
+    update = FakeUpdate(user_id=42, data="projects:set_status:active")
+    context = types.SimpleNamespace(user_data={"current_project_name": "Test"})
     await projects_module.projects_menu_callback(update, context)
 
     assert called["value"] is True
