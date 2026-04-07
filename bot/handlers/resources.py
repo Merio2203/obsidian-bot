@@ -23,8 +23,18 @@ from bot.services.obsidian_service import ObsidianService
 from bot.services.parser_service import ParserService
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_resource_markdown
-from bot.utils.helpers import edit_or_send
-from bot.utils.keyboards import get_main_menu_keyboard
+from bot.utils.helpers import (
+    ask_for_input,
+    edit_or_send,
+    handle_unexpected_menu_button,
+    universal_cancel_handler,
+)
+from bot.utils.keyboards import (
+    MAIN_MENU_BUTTONS_REGEX,
+    get_main_menu_keyboard,
+    get_main_reply_keyboard,
+    get_resources_reply_keyboard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +117,8 @@ async def resources_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """Старт раздела ресурсов."""
     if not update.effective_message:
         return ConversationHandler.END
-    await update.effective_message.reply_text("Отправь URL статьи или YouTube-видео.")
+    await update.effective_message.reply_text("📚 Раздел ресурсов", reply_markup=get_resources_reply_keyboard())
+    await ask_for_input(update, context, "Отправь URL статьи или YouTube-видео.", state=RESOURCE_URL)
     return RESOURCE_URL
 
 
@@ -118,6 +129,10 @@ async def resources_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return RESOURCE_URL
 
     url = update.effective_message.text.strip()
+    if url == "◀️ Назад":
+        await update.effective_message.reply_text("Главное меню:", reply_markup=get_main_reply_keyboard())
+        return ConversationHandler.END
+
     if not (url.startswith("http://") or url.startswith("https://")):
         await update.effective_message.reply_text("Нужна корректная ссылка (http/https).")
         return RESOURCE_URL
@@ -193,6 +208,9 @@ async def resources_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         f"Файл: {resource.obsidian_path}\n\n{sync_note}",
         reply_markup=_action_keyboard(resource.id, resource_type),
     )
+    context.user_data.pop("expecting_text_input", None)
+    context.user_data.pop("input_state", None)
+    await update.effective_message.reply_text("Главное меню:", reply_markup=get_main_reply_keyboard())
     return ConversationHandler.END
 
 
@@ -232,12 +250,7 @@ async def resources_action_callback(update: Update, context: ContextTypes.DEFAUL
 @owner_only
 async def resources_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Отмена сценария сохранения ресурса."""
-    if update.effective_message:
-        await update.effective_message.reply_text(
-            "Операция отменена. Возвращаю в главное меню.",
-            reply_markup=get_main_menu_keyboard(),
-        )
-    return ConversationHandler.END
+    return await universal_cancel_handler(update, context)
 
 
 def register_resources_handlers(application: Application) -> None:
@@ -245,12 +258,17 @@ def register_resources_handlers(application: Application) -> None:
     conversation = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex(r".*Ресурс$"), resources_entry),
+            MessageHandler(filters.Regex(r"^➕ Добавить ресурс$"), resources_entry),
             CommandHandler("resource", resources_entry),
         ],
         states={
             RESOURCE_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, resources_url)],
         },
-        fallbacks=[CommandHandler("cancel", resources_cancel)],
+        fallbacks=[
+            CommandHandler("cancel", resources_cancel),
+            CallbackQueryHandler(universal_cancel_handler, pattern=r"^cancel$"),
+            MessageHandler(filters.TEXT & filters.Regex(MAIN_MENU_BUTTONS_REGEX), handle_unexpected_menu_button),
+        ],
         per_chat=True,
         per_user=True,
     )

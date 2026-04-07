@@ -26,11 +26,18 @@ from bot.services.obsidian_service import ObsidianService
 from bot.services.settings_service import SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_diary_markdown
-from bot.utils.helpers import edit_or_send
+from bot.utils.helpers import (
+    ask_for_input,
+    edit_or_send,
+    handle_unexpected_menu_button,
+    universal_cancel_handler,
+)
 from bot.utils.keyboards import (
+    MAIN_MENU_BUTTONS_REGEX,
     get_diary_edit_sections_keyboard,
     get_diary_existing_entry_keyboard,
     get_diary_mood_keyboard,
+    get_diary_reply_keyboard,
     get_main_menu_keyboard,
 )
 
@@ -103,6 +110,7 @@ async def diary_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     """Точка входа в дневник по кнопке меню или команде."""
     if not update.effective_message:
         return ConversationHandler.END
+    await update.effective_message.reply_text("📓 Раздел дневника", reply_markup=get_diary_reply_keyboard())
 
     today = await _today_local()
     async with SessionLocal() as session:
@@ -193,10 +201,11 @@ async def diary_edit_choose_section(update: Update, context: ContextTypes.DEFAUL
     context.user_data["diary_edit_section_key"] = section_key
     context.user_data["diary_edit_section_title"] = section_title
     shown = current if current else "(раздел пока пуст)"
-    await edit_or_send(
+    await ask_for_input(
         update,
         context,
-        f'Текущее содержимое раздела "{section_title}". Отправь новый текст для замены:\n\n{shown[:2500]}'
+        f'Текущее содержимое раздела "{section_title}":\n\n{shown[:2500]}\n\nОтправь новый текст для замены:',
+        state=DIARY_EDIT_INPUT_TEXT,
     )
     return DIARY_EDIT_INPUT_TEXT
 
@@ -227,7 +236,7 @@ async def diary_edit_input_text(update: Update, context: ContextTypes.DEFAULT_TY
     sync_note = "✅ Sync в Dropbox выполнен." if result.synced else f"⚠️ Sync не выполнен: {result.sync_error}"
     await update.effective_message.reply_text(
         f'✅ Раздел "{section_title}" обновлён\n{sync_note}',
-        reply_markup=get_main_menu_keyboard(),
+        reply_markup=get_diary_reply_keyboard(),
     )
     context.user_data.pop("diary_edit_section_key", None)
     context.user_data.pop("diary_edit_section_title", None)
@@ -245,7 +254,7 @@ async def diary_mood(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return DIARY_MOOD
 
     context.user_data["diary_mood"] = mood
-    await update.effective_message.reply_text("🌅 Как прошёл день?")
+    await ask_for_input(update, context, "🌅 Как прошёл день?", state=DIARY_DAY)
     return DIARY_DAY
 
 
@@ -255,7 +264,7 @@ async def diary_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not update.effective_message or not update.effective_message.text:
         return DIARY_DAY
     context.user_data["diary_day_text"] = update.effective_message.text.strip()
-    await update.effective_message.reply_text("✅ Что сделал сегодня?")
+    await ask_for_input(update, context, "✅ Что сделал сегодня?", state=DIARY_DONE)
     return DIARY_DONE
 
 
@@ -265,7 +274,7 @@ async def diary_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not update.effective_message or not update.effective_message.text:
         return DIARY_DONE
     context.user_data["diary_done_text"] = update.effective_message.text.strip()
-    await update.effective_message.reply_text("💭 Мысли и идеи?")
+    await ask_for_input(update, context, "💭 Мысли и идеи?", state=DIARY_IDEAS)
     return DIARY_IDEAS
 
 
@@ -275,7 +284,7 @@ async def diary_ideas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     if not update.effective_message or not update.effective_message.text:
         return DIARY_IDEAS
     context.user_data["diary_ideas_text"] = update.effective_message.text.strip()
-    await update.effective_message.reply_text("🎯 Планы на завтра?")
+    await ask_for_input(update, context, "🎯 Планы на завтра?", state=DIARY_TOMORROW)
     return DIARY_TOMORROW
 
 
@@ -318,7 +327,7 @@ async def diary_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     sync_note = "✅ Sync в Dropbox выполнен." if result.synced else f"⚠️ Sync не выполнен: {result.sync_error}"
     await update.effective_message.reply_text(
         f"Дневник сохранён за {date_iso}.\n{sync_note}",
-        reply_markup=get_main_menu_keyboard(),
+        reply_markup=get_diary_reply_keyboard(),
     )
 
     for key in (
@@ -330,18 +339,15 @@ async def diary_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "diary_tomorrow_text",
     ):
         context.user_data.pop(key, None)
+    context.user_data.pop("expecting_text_input", None)
+    context.user_data.pop("input_state", None)
     return ConversationHandler.END
 
 
 @owner_only
 async def diary_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Отменяет диалог дневника."""
-    if update.effective_message:
-        await update.effective_message.reply_text(
-            "Операция отменена. Возвращаю в главное меню.",
-            reply_markup=get_main_menu_keyboard(),
-        )
-    return ConversationHandler.END
+    return await universal_cancel_handler(update, context)
 
 
 def register_diary_handlers(application: Application) -> None:
@@ -361,7 +367,11 @@ def register_diary_handlers(application: Application) -> None:
             DIARY_EDIT_CHOOSE_SECTION: [CallbackQueryHandler(diary_edit_choose_section, pattern=r"^diary:edit_section:")],
             DIARY_EDIT_INPUT_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, diary_edit_input_text)],
         },
-        fallbacks=[CommandHandler("cancel", diary_cancel)],
+        fallbacks=[
+            CommandHandler("cancel", diary_cancel),
+            CallbackQueryHandler(universal_cancel_handler, pattern=r"^cancel$"),
+            MessageHandler(filters.TEXT & filters.Regex(MAIN_MENU_BUTTONS_REGEX), handle_unexpected_menu_button),
+        ],
         per_chat=True,
         per_user=True,
     )

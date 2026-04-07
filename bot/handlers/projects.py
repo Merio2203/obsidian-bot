@@ -25,8 +25,18 @@ from bot.database.crud import create_project, get_project_by_name
 from bot.services.obsidian_service import ObsidianService, sync_db_with_vault
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_project_overview_markdown
-from bot.utils.helpers import edit_or_send
-from bot.utils.keyboards import get_main_menu_keyboard, get_projects_menu_keyboard
+from bot.utils.helpers import (
+    ask_for_input,
+    edit_or_send,
+    handle_unexpected_menu_button,
+    universal_cancel_handler,
+)
+from bot.utils.keyboards import (
+    MAIN_MENU_BUTTONS_REGEX,
+    get_main_menu_keyboard,
+    get_projects_menu_keyboard,
+    get_projects_reply_keyboard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +91,7 @@ async def projects_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Точка входа в раздел проектов по кнопке меню."""
     if not update.effective_message:
         return ConversationHandler.END
+    await update.effective_message.reply_text("📁 Раздел проектов", reply_markup=get_projects_reply_keyboard())
     await edit_or_send(
         update,
         context,
@@ -102,7 +113,7 @@ async def projects_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
     data = update.callback_query.data or ""
 
     if data == "projects:create":
-        await edit_or_send(update, context, "Введите название проекта:")
+        await ask_for_input(update, context, "📁 Введите название проекта:", state=CREATE_NAME)
         return CREATE_NAME
 
     if data == "projects:list":
@@ -154,12 +165,30 @@ async def projects_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 
 @owner_only
+async def projects_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обработка контекстных reply-кнопок раздела проектов."""
+    if not update.effective_message or not update.effective_message.text:
+        return PROJECT_MENU
+    text = update.effective_message.text.strip()
+    if text == "➕ Создать проект":
+        await ask_for_input(update, context, "📁 Введите название проекта:", state=CREATE_NAME)
+        return CREATE_NAME
+    if text == "📋 Список проектов":
+        await _send_projects_list(update, context, include_hint=False)
+        return PROJECT_MENU
+    if text == "◀️ Назад":
+        await update.effective_message.reply_text("Главное меню", reply_markup=get_main_menu_keyboard())
+        return ConversationHandler.END
+    return PROJECT_MENU
+
+
+@owner_only
 async def create_project_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Сохраняет название проекта и переходит к описанию."""
     if not update.effective_message or not update.effective_message.text:
         return CREATE_NAME
     context.user_data["project_name"] = update.effective_message.text.strip()
-    await update.effective_message.reply_text("Введите краткое описание проекта:")
+    await ask_for_input(update, context, "Введите краткое описание проекта:", state=CREATE_DESCRIPTION)
     return CREATE_DESCRIPTION
 
 
@@ -169,8 +198,11 @@ async def create_project_description(update: Update, context: ContextTypes.DEFAU
     if not update.effective_message or not update.effective_message.text:
         return CREATE_DESCRIPTION
     context.user_data["project_description"] = update.effective_message.text.strip()
-    await update.effective_message.reply_text(
-        "Введите стек технологий через запятую (например: Python, FastAPI, PostgreSQL):"
+    await ask_for_input(
+        update,
+        context,
+        "Введите стек технологий через запятую (например: Python, FastAPI, PostgreSQL):",
+        state=CREATE_STACK,
     )
     return CREATE_STACK
 
@@ -181,8 +213,11 @@ async def create_project_stack(update: Update, context: ContextTypes.DEFAULT_TYP
     if not update.effective_message or not update.effective_message.text:
         return CREATE_STACK
     context.user_data["project_stack"] = update.effective_message.text.strip()
-    await update.effective_message.reply_text(
-        "Отправьте ссылку на GitHub репозиторий или '-' если ссылки нет:"
+    await ask_for_input(
+        update,
+        context,
+        "Отправьте ссылку на GitHub репозиторий или '-' если ссылки нет:",
+        state=CREATE_REPO,
     )
     return CREATE_REPO
 
@@ -252,6 +287,8 @@ async def create_project_repo(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data.pop("project_name", None)
         context.user_data.pop("project_description", None)
         context.user_data.pop("project_stack", None)
+        context.user_data.pop("expecting_text_input", None)
+        context.user_data.pop("input_state", None)
 
     await sync_db_with_vault()
     sync_note = (
@@ -264,18 +301,14 @@ async def create_project_repo(update: Update, context: ContextTypes.DEFAULT_TYPE
         parse_mode="HTML",
         reply_markup=get_projects_menu_keyboard(),
     )
+    await update.effective_message.reply_text("📁 Раздел проектов", reply_markup=get_projects_reply_keyboard())
     return PROJECT_MENU
 
 
 @owner_only
 async def cancel_projects(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Прерывает диалог раздела проектов."""
-    if update.effective_message:
-        await update.effective_message.reply_text(
-            "Операция отменена. Возвращаю в главное меню.",
-            reply_markup=get_main_menu_keyboard(),
-        )
-    return ConversationHandler.END
+    return await universal_cancel_handler(update, context)
 
 
 async def _send_projects_list(
@@ -379,18 +412,24 @@ def register_projects_handlers(application: Application) -> None:
     conversation = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex(r".*Проекты$"), projects_entry),
+            MessageHandler(filters.Regex(r"^➕ Создать проект$"), projects_entry),
             CommandHandler("projects", projects_entry),
         ],
         states={
             PROJECT_MENU: [
                 CallbackQueryHandler(projects_menu_callback, pattern=r"^projects:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, projects_menu_text),
             ],
             CREATE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_project_name)],
             CREATE_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_project_description)],
             CREATE_STACK: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_project_stack)],
             CREATE_REPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_project_repo)],
         },
-        fallbacks=[CommandHandler("cancel", cancel_projects)],
+        fallbacks=[
+            CommandHandler("cancel", cancel_projects),
+            CallbackQueryHandler(universal_cancel_handler, pattern=r"^cancel$"),
+            MessageHandler(filters.TEXT & filters.Regex(MAIN_MENU_BUTTONS_REGEX), handle_unexpected_menu_button),
+        ],
         per_chat=True,
         per_user=True,
     )

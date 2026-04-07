@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import logging
 
-from telegram import InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardMarkup, Message, Update
 from telegram.error import BadRequest
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
+
+from bot.utils.keyboards import (
+    MAIN_MENU_BUTTONS,
+    REMOVE_KEYBOARD,
+    get_cancel_keyboard,
+    get_main_reply_keyboard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,3 +103,74 @@ async def notify_and_return(
         except Exception:
             logger.error("Не удалось показать callback-уведомление", exc_info=True)
     await edit_or_send(update, context, menu_text, reply_markup=menu_markup)
+
+
+async def ask_for_input(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    prompt: str,
+    state: int | None = None,
+    cancel_callback: str = "cancel",
+) -> Message | None:
+    """
+    Универсальный запрос ввода:
+    1) скрывает reply-клавиатуру,
+    2) показывает prompt,
+    3) добавляет inline-кнопку "Отмена".
+    """
+    context.user_data["expecting_text_input"] = True
+    if state is not None:
+        context.user_data["input_state"] = state
+
+    anchor = update.effective_message or (update.callback_query.message if update.callback_query else None)
+    if not anchor:
+        return None
+
+    hide_msg = await anchor.reply_text("\u200b", reply_markup=REMOVE_KEYBOARD)
+    try:
+        await hide_msg.delete()
+    except Exception:
+        logger.debug("Не удалось удалить техническое сообщение скрытия клавиатуры", exc_info=True)
+
+    return await anchor.reply_text(prompt, reply_markup=get_cancel_keyboard(cancel_callback))
+
+
+async def handle_unexpected_menu_button(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    """
+    Перехватывает случайное нажатие кнопки главного меню во время ввода.
+    Сохраняет текущий state и просит отменить действие через inline-кнопку.
+    """
+    message = update.effective_message
+    if not message or not message.text:
+        return context.user_data.get("input_state", ConversationHandler.END)
+
+    if message.text not in MAIN_MENU_BUTTONS:
+        return context.user_data.get("input_state", ConversationHandler.END)
+
+    await message.reply_text(
+        "⚠️ Сейчас ожидается ввод текста.\nНажми «❌ Отмена», чтобы прервать действие.",
+        reply_markup=get_cancel_keyboard(),
+    )
+    return context.user_data.get("input_state", ConversationHandler.END)
+
+
+async def universal_cancel_handler(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    """Универсальная отмена сценария с очисткой состояния и возвратом главного меню."""
+    if update.callback_query:
+        try:
+            await update.callback_query.answer("Действие отменено", show_alert=False)
+            await update.callback_query.edit_message_text("❌ Действие отменено.")
+        except Exception:
+            logger.debug("Не удалось обновить callback-сообщение при отмене", exc_info=True)
+
+    context.user_data.clear()
+    anchor = update.effective_message or (update.callback_query.message if update.callback_query else None)
+    if anchor:
+        await anchor.reply_text("Главное меню:", reply_markup=get_main_reply_keyboard())
+    return ConversationHandler.END

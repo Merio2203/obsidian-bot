@@ -1,16 +1,70 @@
 """Клавиатуры Telegram для интерфейса бота."""
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
+
+MAIN_MENU_BUTTONS = (
+    "📁 Проекты",
+    "✅ Задачи",
+    "📓 Дневник",
+    "💡 Идея",
+    "📚 Ресурс",
+    "📥 Входящие",
+    "📊 Сегодня",
+    "⚙️ Настройки",
+)
+
+MAIN_MENU_BUTTONS_REGEX = r"^(📁 Проекты|✅ Задачи|📓 Дневник|💡 Идея|📚 Ресурс|📥 Входящие|📊 Сегодня|⚙️ Настройки)$"
+REMOVE_KEYBOARD = ReplyKeyboardRemove()
 
 
-def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
-    """Возвращает клавиатуру главного меню."""
+def get_cancel_keyboard(cancel_callback: str = "cancel") -> InlineKeyboardMarkup:
+    """Inline-клавиатура отмены для режимов ввода."""
+    return InlineKeyboardMarkup([[InlineKeyboardButton("❌ Отмена", callback_data=cancel_callback)]])
+
+
+def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Главная reply-клавиатура."""
     keyboard = [
         ["📁 Проекты", "✅ Задачи"],
         ["📓 Дневник", "💡 Идея"],
         ["📚 Ресурс", "📥 Входящие"],
         ["📊 Сегодня", "⚙️ Настройки"],
     ]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
+    """Совместимость со старым именем функции главного меню."""
+    return get_main_reply_keyboard()
+
+
+def get_tasks_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Контекстная reply-клавиатура раздела задач."""
+    keyboard = [["➕ Создать задачу"], ["◀️ Назад"]]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+def get_projects_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Контекстная reply-клавиатура раздела проектов."""
+    keyboard = [["➕ Создать проект", "📋 Список проектов"], ["◀️ Назад"]]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+def get_project_detail_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Контекстная reply-клавиатура внутри карточки проекта."""
+    keyboard = [["➕ Новая задача", "✅ Задачи проекта"], ["◀️ К списку проектов"]]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+def get_diary_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Контекстная reply-клавиатура дневника."""
+    keyboard = [["📝 Новая запись", "📖 Читать"], ["✏️ Редактировать"], ["◀️ Назад"]]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+def get_resources_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Контекстная reply-клавиатура ресурсов."""
+    keyboard = [["➕ Добавить ресурс", "📋 Список"], ["◀️ Назад"]]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 

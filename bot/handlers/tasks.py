@@ -6,7 +6,7 @@ import logging
 from datetime import date, datetime
 from typing import Optional
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -33,13 +33,20 @@ from bot.services.obsidian_service import ObsidianService
 from bot.services.settings_service import SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_task_markdown
-from bot.utils.helpers import edit_or_send
+from bot.utils.helpers import (
+    ask_for_input,
+    edit_or_send,
+    handle_unexpected_menu_button,
+    universal_cancel_handler,
+)
 from bot.utils.keyboards import (
+    MAIN_MENU_BUTTONS_REGEX,
     get_main_menu_keyboard,
     get_task_actions_keyboard,
     get_task_calendar_keyboard,
     get_task_priority_keyboard,
     get_task_status_keyboard,
+    get_tasks_reply_keyboard,
     get_tasks_menu_keyboard,
 )
 
@@ -142,6 +149,7 @@ async def tasks_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     """Точка входа раздела задач."""
     if not update.effective_message:
         return ConversationHandler.END
+    await update.effective_message.reply_text("✅ Раздел задач", reply_markup=get_tasks_reply_keyboard())
     await edit_or_send(
         update,
         context,
@@ -210,9 +218,24 @@ async def tasks_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         project_raw = data.split(":", 2)[-1]
         project_id = None if project_raw == "none" else int(project_raw)
         context.user_data["task_project_id"] = project_id
-        await edit_or_send(update, context, "Введите название задачи:")
+        await ask_for_input(update, context, "Введите название задачи:", state=TASK_TITLE)
         return TASK_TITLE
 
+    return TASK_MENU
+
+
+@owner_only
+async def tasks_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обработка контекстных reply-кнопок раздела задач."""
+    if not update.effective_message or not update.effective_message.text:
+        return TASK_MENU
+    text = update.effective_message.text.strip()
+    if text == "➕ Создать задачу":
+        await _ask_project_selection(update, context)
+        return TASK_PROJECT
+    if text == "◀️ Назад":
+        await update.effective_message.reply_text("Главное меню", reply_markup=get_main_menu_keyboard())
+        return ConversationHandler.END
     return TASK_MENU
 
 
@@ -222,7 +245,7 @@ async def create_task_title(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not update.effective_message or not update.effective_message.text:
         return TASK_TITLE
     context.user_data["task_title"] = update.effective_message.text.strip()
-    await update.effective_message.reply_text("Опишите задачу подробнее:")
+    await ask_for_input(update, context, "Опишите задачу подробнее:", state=TASK_DESCRIPTION)
     return TASK_DESCRIPTION
 
 
@@ -251,9 +274,11 @@ async def create_task_priority(update: Update, context: ContextTypes.DEFAULT_TYP
         return TASK_PRIORITY
 
     context.user_data["task_priority"] = priority
-    await update.effective_message.reply_text(
+    await ask_for_input(
+        update,
+        context,
         "Введите дедлайн в формате ДД.ММ.ГГГГ или '-' если без дедлайна:",
-        reply_markup=ReplyKeyboardRemove(),
+        state=TASK_DEADLINE,
     )
     return TASK_DEADLINE
 
@@ -272,7 +297,12 @@ async def create_task_deadline(update: Update, context: ContextTypes.DEFAULT_TYP
         return TASK_DEADLINE
 
     context.user_data["task_deadline"] = deadline
-    await update.effective_message.reply_text("Введите оценку времени в часах (например 2 или 1.5) либо '-'")
+    await ask_for_input(
+        update,
+        context,
+        "Введите оценку времени в часах (например 2 или 1.5) либо '-'",
+        state=TASK_ESTIMATE,
+    )
     return TASK_ESTIMATE
 
 
@@ -433,21 +463,19 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
         parse_mode="HTML",
         reply_markup=get_tasks_menu_keyboard(),
     )
+    await update.effective_message.reply_text("✅ Раздел задач", reply_markup=get_tasks_reply_keyboard())
 
     for key in ("task_project_id", "task_title", "task_description", "task_priority", "task_deadline", "task_estimate"):
         context.user_data.pop(key, None)
+    context.user_data.pop("expecting_text_input", None)
+    context.user_data.pop("input_state", None)
     return TASK_MENU
 
 
 @owner_only
 async def cancel_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Отменяет текущую операцию в задачах."""
-    if update.effective_message:
-        await update.effective_message.reply_text(
-            "Операция отменена. Возвращаю в главное меню.",
-            reply_markup=get_main_menu_keyboard(),
-        )
-    return ConversationHandler.END
+    return await universal_cancel_handler(update, context)
 
 
 async def _ask_project_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -513,11 +541,18 @@ def register_tasks_handlers(application: Application) -> None:
     conversation = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex(r".*Задачи$"), tasks_entry),
+            MessageHandler(filters.Regex(r"^➕ Создать задачу$"), tasks_entry),
             CommandHandler("tasks", tasks_entry),
         ],
         states={
-            TASK_MENU: [CallbackQueryHandler(tasks_menu_callback, pattern=r"^tasks:")],
-            TASK_PROJECT: [CallbackQueryHandler(tasks_menu_callback, pattern=r"^tasks:")],
+            TASK_MENU: [
+                CallbackQueryHandler(tasks_menu_callback, pattern=r"^tasks:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, tasks_menu_text),
+            ],
+            TASK_PROJECT: [
+                CallbackQueryHandler(tasks_menu_callback, pattern=r"^tasks:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, tasks_menu_text),
+            ],
             TASK_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_title)],
             TASK_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_description)],
             TASK_PRIORITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_priority)],
@@ -525,7 +560,11 @@ def register_tasks_handlers(application: Application) -> None:
             TASK_ESTIMATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_estimate)],
             TASK_CALENDAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_calendar)],
         },
-        fallbacks=[CommandHandler("cancel", cancel_tasks)],
+        fallbacks=[
+            CommandHandler("cancel", cancel_tasks),
+            CallbackQueryHandler(universal_cancel_handler, pattern=r"^cancel$"),
+            MessageHandler(filters.TEXT & filters.Regex(MAIN_MENU_BUTTONS_REGEX), handle_unexpected_menu_button),
+        ],
         per_chat=True,
         per_user=True,
     )

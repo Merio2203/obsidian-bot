@@ -22,8 +22,13 @@ from bot.services.ai_service import AIService
 from bot.services.obsidian_service import ObsidianService
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_note_markdown
-from bot.utils.helpers import edit_or_send
-from bot.utils.keyboards import get_main_menu_keyboard
+from bot.utils.helpers import (
+    ask_for_input,
+    edit_or_send,
+    handle_unexpected_menu_button,
+    universal_cancel_handler,
+)
+from bot.utils.keyboards import MAIN_MENU_BUTTONS_REGEX, get_main_menu_keyboard, get_main_reply_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +106,7 @@ async def idea_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not update.effective_message:
         return ConversationHandler.END
     context.user_data["note_type"] = "idea"
-    await update.effective_message.reply_text("Отправь текст идеи одним сообщением.")
+    await ask_for_input(update, context, "💡 Введи текст идеи одним сообщением:", state=NOTE_TEXT)
     return NOTE_TEXT
 
 
@@ -111,7 +116,7 @@ async def inbox_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     if not update.effective_message:
         return ConversationHandler.END
     context.user_data["note_type"] = "inbox"
-    await update.effective_message.reply_text("Отправь входящую заметку одним сообщением.")
+    await ask_for_input(update, context, "📥 Введи входящую заметку одним сообщением:", state=NOTE_TEXT)
     return NOTE_TEXT
 
 
@@ -179,6 +184,9 @@ async def save_note_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"Файл: {note.obsidian_path}\n\n{sync_note}",
         reply_markup=_action_keyboard(note_type, str(note.id)),
     )
+    context.user_data.pop("expecting_text_input", None)
+    context.user_data.pop("input_state", None)
+    await update.effective_message.reply_text("Главное меню:", reply_markup=get_main_reply_keyboard())
     return ConversationHandler.END
 
 
@@ -217,12 +225,7 @@ async def notes_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
 @owner_only
 async def notes_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Отмена создания заметки."""
-    if update.effective_message:
-        await update.effective_message.reply_text(
-            "Операция отменена. Возвращаю в главное меню.",
-            reply_markup=get_main_menu_keyboard(),
-        )
-    return ConversationHandler.END
+    return await universal_cancel_handler(update, context)
 
 
 def register_notes_handlers(application: Application) -> None:
@@ -237,7 +240,11 @@ def register_notes_handlers(application: Application) -> None:
         states={
             NOTE_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_note_text)],
         },
-        fallbacks=[CommandHandler("cancel", notes_cancel)],
+        fallbacks=[
+            CommandHandler("cancel", notes_cancel),
+            CallbackQueryHandler(universal_cancel_handler, pattern=r"^cancel$"),
+            MessageHandler(filters.TEXT & filters.Regex(MAIN_MENU_BUTTONS_REGEX), handle_unexpected_menu_button),
+        ],
         per_chat=True,
         per_user=True,
     )
