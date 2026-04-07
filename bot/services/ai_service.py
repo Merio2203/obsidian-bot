@@ -32,11 +32,15 @@ class AIRequestConfig:
 
 
 REQUEST_CONFIGS = {
-    "tags": AIRequestConfig(task_type="tags", max_tokens=50),
+    "tags_general": AIRequestConfig(task_type="tags_general", max_tokens=80),
+    "task_tags_links": AIRequestConfig(task_type="task_tags_links", max_tokens=150),
+    "diary_tags_links": AIRequestConfig(task_type="diary_tags_links", max_tokens=150),
+    "resource_tags_links": AIRequestConfig(task_type="resource_tags_links", max_tokens=150),
+    "short_title": AIRequestConfig(task_type="short_title", max_tokens=50),
     "article_summary": AIRequestConfig(task_type="article_summary", max_tokens=500),
     "youtube_summary": AIRequestConfig(task_type="youtube_summary", max_tokens=300),
-    "subtasks": AIRequestConfig(task_type="subtasks", max_tokens=400),
     "cursor_prompt": AIRequestConfig(task_type="cursor_prompt", max_tokens=1500),
+    "diary_help": AIRequestConfig(task_type="diary_help", max_tokens=300),
 }
 
 
@@ -51,10 +55,69 @@ class AIService:
         )
 
     async def generate_tags(self, text: str) -> str:
-        """Генерирует теги для короткой заметки."""
-        system_prompt = "Ты помощник для Obsidian. Верни только список тегов через запятую на русском."
-        user_prompt = f"Сгенерируй до 5 тегов для заметки:\n\n{text}"
-        return await self._cached_completion("tags", system_prompt, user_prompt)
+        """Генерирует теги для заметки/идеи/входящих."""
+        system_prompt = (
+            "Ты помощник Obsidian. Верни только теги через запятую, 2-5 штук, без объяснений."
+        )
+        user_prompt = f"Текст:\n{text}"
+        return await self._cached_completion("tags_general", system_prompt, user_prompt)
+
+    async def generate_short_title(self, raw_title: str, content: str = "") -> str:
+        """Формирует короткий и читаемый title."""
+        system_prompt = (
+            "Сократи заголовок до короткого, понятного названия на русском. "
+            "Верни только одну строку без кавычек."
+        )
+        user_prompt = f"Сырой заголовок: {raw_title}\nКонтекст:\n{content}"
+        return await self._cached_completion("short_title", system_prompt, user_prompt)
+
+    async def generate_task_tags_and_links(
+        self,
+        title: str,
+        description: str,
+        project_name: str,
+        existing_links: list[str],
+    ) -> dict[str, Any]:
+        """Генерирует теги и wiki-links для задачи."""
+        system_prompt = (
+            "Ты помощник по оформлению Obsidian. Не придумывай содержание задачи. "
+            "Верни JSON: {\"tags\": [..], \"links\": [..]}. "
+            "links только из списка существующих названий, формат [[Название]]."
+        )
+        user_prompt = json.dumps(
+            {
+                "title": title,
+                "description": description,
+                "project_name": project_name,
+                "existing_files": existing_links,
+            },
+            ensure_ascii=False,
+        )
+        text = await self._cached_completion("task_tags_links", system_prompt, user_prompt)
+        return self._safe_parse_json(text, fallback={"tags": ["задача"], "links": []})
+
+    async def generate_links_for_content(
+        self,
+        content_type: str,
+        text: str,
+        existing_links: list[str],
+    ) -> dict[str, Any]:
+        """Генерирует теги и links для произвольного контента."""
+        key = "diary_tags_links" if content_type == "diary" else "resource_tags_links"
+        system_prompt = (
+            "Ты помощник Obsidian. Верни JSON: {\"tags\": [..], \"links\": [..]}. "
+            "links выбирай только из переданного списка существующих файлов."
+        )
+        user_prompt = json.dumps(
+            {
+                "content_type": content_type,
+                "text": text,
+                "existing_files": existing_links,
+            },
+            ensure_ascii=False,
+        )
+        text_out = await self._cached_completion(key, system_prompt, user_prompt)
+        return self._safe_parse_json(text_out, fallback={"tags": [], "links": []})
 
     async def summarize_article(self, title: str, content: str) -> str:
         """Генерирует краткое резюме статьи и ключевые мысли."""
@@ -73,14 +136,6 @@ class AIService:
         )
         user_prompt = f"Название: {title}\nАвтор: {author}\nОписание:\n{description}"
         return await self._cached_completion("youtube_summary", system_prompt, user_prompt)
-
-    async def generate_subtasks_and_criteria(self, task_context: str) -> str:
-        """Разбивает задачу на подзадачи и критерии готовности."""
-        system_prompt = (
-            "Ты проектный ассистент. Сформируй подзадачи и критерии готовности в markdown на русском."
-        )
-        user_prompt = f"Контекст задачи:\n{task_context}"
-        return await self._cached_completion("subtasks", system_prompt, user_prompt)
 
     async def generate_cursor_prompt(self, payload: dict[str, Any]) -> str:
         """Генерирует структурированный промт для Cursor AI."""
@@ -122,11 +177,11 @@ class AIService:
                 if not content:
                     raise AIServiceError("AI вернул пустой ответ")
                 return content.strip()
-            except (APIError, AIServiceError, TimeoutError) as exc:
-                last_error = exc
-                logger.warning("Ошибка AI (попытка %s/%s): %s", attempt, attempts, exc)
+            except (APIError, AIServiceError, TimeoutError):
+                logger.warning("Ошибка AI (попытка %s/%s)", attempt, attempts, exc_info=True)
                 if attempt < attempts:
                     await asyncio.sleep(settings.ai_retry_delay_seconds)
+                last_error = AIServiceError("Запрос AI завершился с ошибкой")
 
         raise AIServiceError(f"Не удалось получить ответ AI после {attempts} попыток") from last_error
 
@@ -134,9 +189,7 @@ class AIService:
         async with self._session_factory() as session:
             result = await session.execute(select(AICache).where(AICache.prompt_hash == prompt_hash))
             entity = result.scalar_one_or_none()
-            if entity:
-                return entity.response
-            return None
+            return entity.response if entity else None
 
     async def _save_cache(self, prompt_hash: str, task_type: str, response: str) -> None:
         async with self._session_factory() as session:
@@ -147,3 +200,18 @@ class AIService:
     def _make_hash(task_type: str, system_prompt: str, user_prompt: str) -> str:
         normalized = f"{task_type}\n{system_prompt.strip()}\n{user_prompt.strip()}"
         return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _safe_parse_json(raw: str, fallback: dict[str, Any]) -> dict[str, Any]:
+        text = raw.strip()
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.startswith("json"):
+                text = text[4:].strip()
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+            return fallback
+        except Exception:
+            return fallback

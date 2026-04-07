@@ -97,3 +97,26 @@ def get_diary_mood_keyboard() -> ReplyKeyboardMarkup:
     """Reply-клавиатура выбора настроения для дневника."""
     keyboard = [["😊", "😐", "😔", "😤", "🤩"]]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, one_time_keyboard=True)
+
+
+def get_diary_existing_entry_keyboard() -> InlineKeyboardMarkup:
+    """Кнопки действий, если дневник за сегодня уже существует."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("📖 Показать", callback_data="diary:show")],
+            [InlineKeyboardButton("✍️ Редактировать", callback_data="diary:edit")],
+            [InlineKeyboardButton("◀️ Назад", callback_data="diary:back")],
+        ]
+    )
+
+
+def get_diary_edit_sections_keyboard() -> InlineKeyboardMarkup:
+    """Кнопки выбора раздела дневника для редактирования."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🌅 Как прошёл день", callback_data="diary:edit_section:day")],
+            [InlineKeyboardButton("✅ Что сделал", callback_data="diary:edit_section:done")],
+            [InlineKeyboardButton("💭 Мысли и идеи", callback_data="diary:edit_section:ideas")],
+            [InlineKeyboardButton("🎯 Планы на завтра", callback_data="diary:edit_section:tomorrow")],
+        ]
+    )

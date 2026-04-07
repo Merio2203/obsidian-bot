@@ -55,17 +55,17 @@ def render_task_markdown(
     deadline_iso: str | None,
     estimated_time: float | None,
     created_at: str,
-    criteria_items: list[str],
-    subtask_items: list[str],
-    cursor_prompt: str = "",
+    tags: list[str],
+    links: list[str],
     notes: str = "",
     task_type: str = "task",
+    google_calendar_id: str = "",
 ) -> str:
     """Формирует markdown для задачи в формате Obsidian-шаблона."""
     deadline_line = deadline_iso or ""
     estimated_line = "" if estimated_time is None else str(estimated_time)
-    criteria = "\n".join([f"- [ ] {item}" for item in criteria_items]) if criteria_items else "- [ ] Определить критерии"
-    subtasks = "\n".join([f"- [ ] {item}" for item in subtask_items]) if subtask_items else "- [ ] Разбить задачу на шаги"
+    tags_line = ", ".join(tags)
+    links_line = ", ".join(links)
 
     return (
         "---\n"
@@ -77,17 +77,12 @@ def render_task_markdown(
         f"deadline: {deadline_line}\n"
         f"estimated_time: {estimated_line}\n"
         f"created: {created_at}\n"
-        "tags: [задача]\n"
-        "google_calendar_id: \n"
+        f"tags: [{tags_line}]\n"
+        f"links: [{links_line}]\n"
+        f"google_calendar_id: {google_calendar_id}\n"
         "---\n\n"
         "## 📋 Описание\n"
         f"{description}\n\n"
-        "## 🎯 Критерии готовности\n"
-        f"{criteria}\n\n"
-        "## 📝 Подзадачи\n"
-        f"{subtasks}\n\n"
-        "## 🤖 Cursor AI Промт\n"
-        f"{cursor_prompt}\n\n"
         "## 📎 Заметки\n"
         f"{notes}\n"
     )
@@ -102,12 +97,16 @@ def render_diary_markdown(
     tomorrow_text: str,
 ) -> str:
     """Формирует markdown-шаблон дневника за день."""
+    dt = datetime.strptime(date_iso, "%Y-%m-%d")
+    title = f"Дневник за {dt.strftime('%d.%m.%Y')}"
     return (
         "---\n"
+        f"title: {title}\n"
         f"date: {date_iso}\n"
         f"mood: {mood}\n"
         "tags: [дневник]\n"
         "---\n\n"
+        f"# {title}\n\n"
         "## 🌅 Как прошёл день\n"
         f"{day_text}\n\n"
         "## ✅ Что сделал\n"
@@ -119,37 +118,23 @@ def render_diary_markdown(
     )
 
 
-def render_diary_append_block(
-    mood: str,
-    day_text: str,
-    done_text: str,
-    ideas_text: str,
-    tomorrow_text: str,
+def render_note_markdown(
+    title: str,
+    note_type: str,
+    tags: list[str],
+    content: str,
+    links: list[str] | None = None,
 ) -> str:
-    """Формирует блок дополнения к существующей записи дневника."""
-    return (
-        "## ➕ Дополнение\n"
-        f"Настроение: {mood}\n\n"
-        "### 🌅 Как прошёл день\n"
-        f"{day_text}\n\n"
-        "### ✅ Что сделал\n"
-        f"{done_text}\n\n"
-        "### 💭 Мысли и идеи\n"
-        f"{ideas_text}\n\n"
-        "### 🎯 Планы на завтра\n"
-        f"{tomorrow_text}\n"
-    )
-
-
-def render_note_markdown(title: str, note_type: str, tags: list[str], content: str) -> str:
     """Формирует markdown для быстрой заметки/идеи."""
     saved = today_iso()
     tags_line = ", ".join(tags)
+    links_line = ", ".join(links or [])
     return (
         "---\n"
         f"title: {title}\n"
         f"type: {note_type}\n"
         f"tags: [{tags_line}]\n"
+        f"links: [{links_line}]\n"
         f"saved: {saved}\n"
         "---\n\n"
         "## 📝 Содержание\n"
@@ -164,10 +149,12 @@ def render_resource_markdown(
     tags: list[str],
     summary: str,
     key_points: list[str],
+    links: list[str] | None = None,
 ) -> str:
     """Формирует markdown для сохраненного ресурса."""
     saved = today_iso()
     tags_line = ", ".join(tags)
+    links_line = ", ".join(links or [])
     points = "\n".join([f"- {point}" for point in key_points]) if key_points else "- Уточнить ключевые мысли"
     return (
         "---\n"
@@ -175,6 +162,7 @@ def render_resource_markdown(
         f"url: {url}\n"
         f"type: {resource_type}\n"
         f"tags: [{tags_line}]\n"
+        f"links: [{links_line}]\n"
         f"saved: {saved}\n"
         "---\n\n"
         "## 📝 Резюме\n"

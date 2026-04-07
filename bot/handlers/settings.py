@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
@@ -18,6 +20,8 @@ from bot.services.obsidian_service import ObsidianService
 from bot.services.settings_service import SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.keyboards import get_main_menu_keyboard
+
+logger = logging.getLogger(__name__)
 
 SETTINGS_MENU, SETTINGS_TZ_INPUT = range(2)
 
@@ -113,6 +117,7 @@ async def settings_timezone_input(update: Update, context: ContextTypes.DEFAULT_
     try:
         cfg = await service.set_timezone(timezone_name)
     except Exception:
+        logger.error("Ошибка сохранения timezone в настройках", exc_info=True)
         await update.effective_message.reply_text("Некорректная timezone. Пример: Europe/Kaliningrad")
         return SETTINGS_TZ_INPUT
 

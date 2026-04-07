@@ -65,6 +65,38 @@ class ObsidianService:
         new_content = f"{current.rstrip()}\n\n{append_text.strip()}\n"
         return await self.write_markdown(relative_path, new_content)
 
+    async def get_existing_links(self, content_type: str) -> list[str]:
+        """
+        Сканирует vault и возвращает список существующих названий файлов
+        по типу контента (проекты, задачи, ресурсы и т.д.)
+        для передачи в AI как контекст при генерации wiki-links.
+        """
+        mapping = {
+            "projects": "📁 Проекты/**/*.md",
+            "tasks": "📁 Проекты/**/✅ Задачи/*.md",
+            "resources": "📚 Ресурсы/**/*.md",
+            "diary": "📓 Дневник/*.md",
+            "notes": "{💡 Идеи,📥 Входящие}/*.md",
+            "all": "**/*.md",
+        }
+        pattern = mapping.get(content_type, mapping["all"])
+
+        if "{" in pattern:
+            # Ручная обработка brace-формата для pathlib.
+            patterns = ["💡 Идеи/*.md", "📥 Входящие/*.md"]
+            files = []
+            for p in patterns:
+                files.extend(await asyncio.to_thread(lambda pp=p: list(self.vault_path.glob(pp))))
+        else:
+            files = await asyncio.to_thread(lambda: list(self.vault_path.glob(pattern)))
+
+        names = []
+        for file_path in files:
+            if file_path.is_file():
+                names.append(file_path.stem)
+        names_sorted = sorted(set(names))
+        return names_sorted[:1000]
+
     @staticmethod
     def sanitize_filename(name: str) -> str:
         """Создает безопасное имя файла."""
@@ -88,7 +120,7 @@ class ObsidianService:
 
         if process.returncode != 0:
             error_text = stderr.decode("utf-8", errors="ignore").strip() or "unknown error"
-            logger.error("Ошибка rclone sync: %s", error_text)
+            logger.error("Ошибка rclone sync: %s", error_text, exc_info=True)
             return False, error_text
         return True, None
 

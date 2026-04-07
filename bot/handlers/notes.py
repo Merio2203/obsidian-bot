@@ -50,6 +50,23 @@ def _normalize_tags(raw_tags: str) -> list[str]:
     return deduped[:5]
 
 
+def _normalize_links(raw_links: list[str] | str | None) -> list[str]:
+    if raw_links is None:
+        return []
+    if isinstance(raw_links, str):
+        source = [x.strip() for x in raw_links.split(",")]
+    else:
+        source = [str(x).strip() for x in raw_links]
+    links = []
+    for item in source:
+        if not item:
+            continue
+        token = item if item.startswith("[[") else f"[[{item.strip('[]')}]]"
+        if token not in links:
+            links.append(token)
+    return links[:6]
+
+
 def _action_keyboard(note_type: str, payload: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
@@ -95,20 +112,32 @@ async def save_note_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     folder = "💡 Идеи" if note_type == "idea" else "📥 Входящие"
 
     ai = AIService(SessionLocal)
+    obsidian = ObsidianService()
+    existing_links = await obsidian.get_existing_links("all")
     try:
         raw_tags = await ai.generate_tags(content)
         tags = _normalize_tags(raw_tags)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Не удалось получить AI-теги: %s", exc)
+    except Exception:  # noqa: BLE001
+        logger.error("Не удалось получить AI-теги", exc_info=True)
         tags = ["заметка", "входящие" if note_type == "inbox" else "идея"]
+    links: list[str] = []
+    try:
+        links_payload = await ai.generate_links_for_content(
+            content_type="note",
+            text=content,
+            existing_links=existing_links,
+        )
+        links = _normalize_links(links_payload.get("links"))
+    except Exception:
+        logger.error("Не удалось сгенерировать AI-links для заметки", exc_info=True)
 
-    obsidian = ObsidianService()
     filename = f"{obsidian.sanitize_filename(title)}.md"
     relative_path = f"{folder}/{filename}"
     markdown = render_note_markdown(
         title=title,
         note_type=note_type,
         tags=tags,
+        links=links,
         content=content,
     )
     result = await obsidian.write_markdown(relative_path, markdown)

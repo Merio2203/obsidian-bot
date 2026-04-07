@@ -38,6 +38,6 @@ async def test_ai_service_uses_max_tokens_and_cache() -> None:
         assert first == "готово"
         assert second == "готово"
         assert len(fake_create.calls) == 1
-        assert fake_create.calls[0]["max_tokens"] == 50
+        assert fake_create.calls[0]["max_tokens"] == 80
 
         await engine.dispose()

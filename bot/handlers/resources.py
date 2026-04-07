@@ -44,6 +44,23 @@ def _normalize_tags(raw_tags: str) -> list[str]:
     return deduped[:7]
 
 
+def _normalize_links(raw_links: list[str] | str | None) -> list[str]:
+    if raw_links is None:
+        return []
+    if isinstance(raw_links, str):
+        source = [x.strip() for x in raw_links.split(",")]
+    else:
+        source = [str(x).strip() for x in raw_links]
+    links = []
+    for item in source:
+        if not item:
+            continue
+        token = item if item.startswith("[[") else f"[[{item.strip('[]')}]]"
+        if token not in links:
+            links.append(token)
+    return links[:8]
+
+
 def _extract_key_points(summary_text: str) -> list[str]:
     points = []
     for line in summary_text.splitlines():
@@ -89,6 +106,7 @@ async def resources_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     parser = ParserService()
     ai = AIService(SessionLocal)
     obsidian = ObsidianService()
+    existing_links = await obsidian.get_existing_links("all")
 
     try:
         if parser.is_youtube_url(url):
@@ -103,17 +121,27 @@ async def resources_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             resource_type = "article"
             folder = "📚 Ресурсы/Статьи"
             title = article.title
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Ошибка обработки ресурса: %s", exc)
+    except Exception:  # noqa: BLE001
+        logger.error("Ошибка обработки ресурса", exc_info=True)
         await update.effective_message.reply_text("Не удалось обработать ресурс. Попробуй другую ссылку.")
         return RESOURCE_URL
 
     try:
         raw_tags = await ai.generate_tags(f"{title}\n{summary}")
         tags = _normalize_tags(raw_tags)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Не удалось сгенерировать теги: %s", exc)
+    except Exception:  # noqa: BLE001
+        logger.error("Не удалось сгенерировать теги", exc_info=True)
         tags = ["ресурс", "youtube" if resource_type == "youtube" else "статья"]
+    try:
+        links_payload = await ai.generate_links_for_content(
+            content_type="resource",
+            text=f"{title}\n{summary}",
+            existing_links=existing_links,
+        )
+        links = _normalize_links(links_payload.get("links"))
+    except Exception:
+        logger.error("Не удалось сгенерировать links для ресурса", exc_info=True)
+        links = []
 
     key_points = _extract_key_points(summary)
     markdown = render_resource_markdown(
@@ -123,6 +151,7 @@ async def resources_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         tags=tags,
         summary=summary,
         key_points=key_points,
+        links=links,
     )
 
     file_name = f"{obsidian.sanitize_filename(title)}.md"

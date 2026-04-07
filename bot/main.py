@@ -21,20 +21,7 @@ from bot.handlers.tasks import register_tasks_handlers
 from bot.handlers.today import register_today_handlers
 from bot.services.ai_service import AIService
 from bot.services.obsidian_service import ObsidianService
-
-
-def setup_logging() -> None:
-    """Настраивает логирование в файл и stdout."""
-    log_path = settings.log_file
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-        handlers=[
-            logging.FileHandler(log_path, encoding="utf-8"),
-            logging.StreamHandler(),
-        ],
-    )
+from bot.utils.logger import setup_logger
 
 
 async def on_startup() -> None:
@@ -47,7 +34,7 @@ async def on_startup() -> None:
 
 async def run_bot() -> None:
     """Запускает bot polling c graceful shutdown."""
-    setup_logging()
+    setup_logger()
     await on_startup()
 
     app = Application.builder().token(settings.telegram_bot_token).build()
@@ -74,6 +61,7 @@ async def run_bot() -> None:
             pass
 
     await app.initialize()
+    setup_logger(bot=app.bot, owner_id=settings.telegram_owner_id)
     await app.start()
     await app.updater.start_polling(drop_pending_updates=True)
     logging.getLogger(__name__).info("Бот запущен и ожидает сообщения.")

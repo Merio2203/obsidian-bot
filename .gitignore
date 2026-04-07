@@ -7,9 +7,9 @@ __pycache__/
 *.swp
 *.swo
 .DS_Store
+*.log
 
 data/*.db
 data/google_token.json
 data/*.log
 vault/.obsidian/
-

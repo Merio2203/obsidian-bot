@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -19,6 +20,8 @@ from bot.services.google_calendar import GoogleCalendarService
 from bot.services.settings_service import SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.keyboards import get_main_menu_keyboard
+
+logger = logging.getLogger(__name__)
 
 
 async def _today_local_date():
@@ -59,6 +62,7 @@ async def build_today_dashboard_text() -> str:
     try:
         google_events = await GoogleCalendarService(runtime.timezone).list_events_for_date(today)
     except Exception:
+        logger.error("Не удалось получить события Google Calendar для дашборда", exc_info=True)
         google_events = []
 
     diary_status = "✅ Запись дневника за сегодня есть" if diary_entry else "⚠️ Дневник за сегодня еще не заполнен"

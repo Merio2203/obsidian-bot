@@ -72,52 +72,42 @@ def _parse_estimate(raw: str) -> Optional[float]:
     return hours
 
 
-def _extract_checkbox_items(lines: list[str]) -> list[str]:
-    items: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("- [ ] "):
-            items.append(stripped.replace("- [ ] ", "", 1).strip())
-        elif stripped.startswith("- "):
-            items.append(stripped.replace("- ", "", 1).strip())
-    return [item for item in items if item]
+def _normalize_tags(raw: list[str] | str | None) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        source = [x.strip() for x in raw.split(",")]
+    else:
+        source = [str(x).strip() for x in raw]
+    tags: list[str] = []
+    for item in source:
+        if not item:
+            continue
+        token = item.lower().replace(" ", "-")
+        if token.startswith("#"):
+            token = token[1:]
+        if token and token not in tags:
+            tags.append(token)
+    return tags[:5]
 
 
-def _split_ai_plan(ai_text: str) -> tuple[list[str], list[str]]:
-    """Пытается выделить критерии и подзадачи из AI-ответа."""
-    lower = ai_text.lower()
-    criteria_idx = lower.find("критер")
-    subtasks_idx = lower.find("подзада")
-
-    if criteria_idx == -1 and subtasks_idx == -1:
-        fallback = _extract_checkbox_items(ai_text.splitlines())
-        if not fallback:
-            return ["Согласовать критерии завершения"], ["Определить конкретные шаги реализации"]
-        mid = max(1, len(fallback) // 2)
-        return fallback[:mid], fallback[mid:]
-
-    criteria_block = ai_text
-    subtasks_block = ai_text
-    if criteria_idx != -1 and subtasks_idx != -1:
-        if criteria_idx < subtasks_idx:
-            criteria_block = ai_text[criteria_idx:subtasks_idx]
-            subtasks_block = ai_text[subtasks_idx:]
-        else:
-            subtasks_block = ai_text[subtasks_idx:criteria_idx]
-            criteria_block = ai_text[criteria_idx:]
-    elif criteria_idx != -1:
-        criteria_block = ai_text[criteria_idx:]
-    elif subtasks_idx != -1:
-        subtasks_block = ai_text[subtasks_idx:]
-
-    criteria_items = _extract_checkbox_items(criteria_block.splitlines())
-    subtask_items = _extract_checkbox_items(subtasks_block.splitlines())
-
-    if not criteria_items:
-        criteria_items = ["Принятое решение соответствует описанию задачи"]
-    if not subtask_items:
-        subtask_items = ["Разбить задачу на конкретные шаги"]
-    return criteria_items, subtask_items
+def _normalize_links(raw: list[str] | str | None) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        source = [x.strip() for x in raw.split(",")]
+    else:
+        source = [str(x).strip() for x in raw]
+    links: list[str] = []
+    for item in source:
+        if not item:
+            continue
+        token = item
+        if not token.startswith("[["):
+            token = f"[[{token.strip('[]')}]]"
+        if token not in links:
+            links.append(token)
+    return links[:8]
 
 
 def _task_text(task_id: int, title: str, status: str, priority: str, obsidian_path: str) -> str:
@@ -319,33 +309,32 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
             project_id = None
 
     ai_service = AIService(SessionLocal)
-    try:
-        ai_result = await ai_service.generate_subtasks_and_criteria(
-            f"Название: {title}\nОписание: {description}\nПриоритет: {priority}\nПроект: {project_name}"
-        )
-        criteria_items, subtask_items = _split_ai_plan(ai_result)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Не удалось получить AI-разбиение задачи: %s", exc)
-        criteria_items = ["Сформировать и согласовать критерии готовности"]
-        subtask_items = ["Разбить задачу на конкретные шаги вручную"]
-
     obsidian = ObsidianService()
-    file_name = f"{obsidian.sanitize_filename(title)}.md"
-    relative_path = f"{project_folder}/{file_name}"
-    created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    existing_links = await obsidian.get_existing_links("all")
+    final_title = title
+    tags: list[str] = ["задача"]
+    links: list[str] = [f"[[{project_name}]]"] if project_name != "Без проекта" else []
+    try:
+        short_title = await ai_service.generate_short_title(title, description)
+        if short_title:
+            final_title = short_title.strip()[:120]
+    except Exception:
+        logger.error("Не удалось сгенерировать короткий title задачи", exc_info=True)
 
-    markdown = render_task_markdown(
-        title=title,
-        project_name=project_name,
-        priority=priority,
-        description=description,
-        deadline_iso=deadline.isoformat() if deadline else None,
-        estimated_time=estimate,
-        created_at=created_at,
-        criteria_items=criteria_items,
-        subtask_items=subtask_items,
-    )
-    write_result = await obsidian.write_markdown(relative_path, markdown)
+    try:
+        tags_links = await ai_service.generate_task_tags_and_links(
+            title=final_title,
+            description=description,
+            project_name=project_name,
+            existing_links=existing_links,
+        )
+        tags = _normalize_tags(tags_links.get("tags")) or tags
+        ai_links = _normalize_links(tags_links.get("links"))
+        for link in ai_links:
+            if link not in links:
+                links.append(link)
+    except Exception:
+        logger.error("Не удалось сгенерировать теги/связи для задачи", exc_info=True)
 
     google_event_id = None
     calendar_note = ""
@@ -357,7 +346,7 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
                 runtime = await SettingsService(SessionLocal).get_runtime_settings()
                 calendar_service = GoogleCalendarService(runtime.timezone)
                 google_event_id = await calendar_service.create_event_for_task(
-                    title=title,
+                    title=final_title,
                     description=description,
                     due_date=deadline,
                 )
@@ -365,15 +354,33 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
                     calendar_note = "📅 Добавлено в Google Calendar."
                 else:
                     calendar_note = "📅 Calendar недоступен: проверь токен Google OAuth."
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Ошибка создания события Calendar: %s", exc)
+            except Exception:  # noqa: BLE001
+                logger.error("Ошибка создания события Calendar", exc_info=True)
                 calendar_note = "📅 Не удалось создать событие в Calendar."
+
+    file_name = f"{obsidian.sanitize_filename(final_title)}.md"
+    relative_path = f"{project_folder}/{file_name}"
+    created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    markdown = render_task_markdown(
+        title=final_title,
+        project_name=project_name,
+        priority=priority,
+        description=description,
+        deadline_iso=deadline.isoformat() if deadline else None,
+        estimated_time=estimate,
+        created_at=created_at,
+        tags=tags,
+        links=links,
+        google_calendar_id=google_event_id or "",
+    )
+    write_result = await obsidian.write_markdown(relative_path, markdown)
 
     async with SessionLocal() as session:
         task = await create_task(
             session=session,
             project_id=project_id,
-            title=title,
+            title=final_title,
             priority=priority,
             task_type="task",
             deadline=deadline,

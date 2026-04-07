@@ -24,5 +24,18 @@ async def test_write_and_read_markdown(tmp_path: Path) -> None:
     assert content == "# test"
 
 
+@pytest.mark.asyncio
+async def test_get_existing_links(tmp_path: Path) -> None:
+    service = ObsidianService(vault_path=tmp_path)
+    await service.ensure_dirs()
+    (tmp_path / "📁 Проекты" / "Проект A").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "📁 Проекты" / "Проект A" / "📋 Обзор.md").write_text("ok", encoding="utf-8")
+    (tmp_path / "📥 Входящие" / "заметка.md").write_text("ok", encoding="utf-8")
+
+    links = await service.get_existing_links("all")
+    assert "📋 Обзор" in links
+    assert "заметка" in links
+
+
 def test_sanitize_filename() -> None:
     assert ObsidianService.sanitize_filename("  Тест: идея / 2026  ") == "тест-идея-2026"
