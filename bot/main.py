@@ -6,7 +6,7 @@ import asyncio
 import logging
 import signal
 
-from telegram.ext import Application, ContextTypes
+from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
 from bot.config import settings
 from bot.database import SessionLocal, engine
@@ -17,6 +17,7 @@ from bot.handlers.notes import register_notes_handlers
 from bot.handlers.projects import register_projects_handlers
 from bot.handlers.resources import register_resources_handlers
 from bot.handlers.settings import register_settings_handlers
+from bot.handlers.settings import settings_entry
 from bot.handlers.tasks import register_tasks_handlers
 from bot.handlers.today import register_today_handlers
 from bot.services.ai_service import AIService
@@ -57,6 +58,8 @@ async def run_bot() -> None:
     register_resources_handlers(app)
     register_today_handlers(app)
     register_settings_handlers(app)
+    # Приоритетный роут на "⚙️ Настройки" поверх любых активных ConversationHandler.
+    app.add_handler(MessageHandler(filters.Regex(r"^⚙️ Настройки$"), settings_entry), group=-1)
     register_menu_handlers(app)
     app.add_error_handler(error_handler)
 
