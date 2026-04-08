@@ -26,7 +26,7 @@ async def test_init_db_creates_tables() -> None:
         assert "notes" in tables
         assert "app_settings" in tables
         assert "ai_cache" in tables
-        assert "progress" in task_columns
+        assert "completed" in task_columns
         await engine.dispose()
 
 

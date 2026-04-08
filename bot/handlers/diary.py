@@ -197,6 +197,11 @@ async def diary_action_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             reply_markup=get_diary_edit_sections_keyboard(),
         )
         return DIARY_EDIT_CHOOSE_SECTION
+    if text == "⚙️ Настройки":
+        from bot.handlers.settings import settings_entry
+
+        await settings_entry(update, context)
+        return ConversationHandler.END
     if text == "◀️ Назад":
         await update.effective_message.reply_text("Главное меню:", reply_markup=get_main_menu_keyboard())
         return ConversationHandler.END

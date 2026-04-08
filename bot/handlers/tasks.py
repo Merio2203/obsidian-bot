@@ -25,8 +25,7 @@ from bot.database.crud import (
     get_projects,
     get_task_by_id,
     get_tasks,
-    update_task_progress,
-    update_task_status,
+    update_task_completed,
 )
 from bot.services.ai_service import AIService
 from bot.services.google_calendar import GoogleCalendarService
@@ -48,7 +47,6 @@ from bot.utils.keyboards import (
     get_task_calendar_keyboard,
     get_task_deadline_keyboard,
     get_task_priority_keyboard,
-    get_task_progress_keyboard,
     get_task_status_keyboard,
     get_tasks_reply_keyboard,
     get_default_skip_keyboard,
@@ -72,11 +70,9 @@ DEFAULT_SKIP_TEXT = "⏭ Пропустить"
     TASK_CALENDAR_END,
 ) = range(10)
 
-TASK_STATUS_MAP = {
-    "new": "🔴 Новая",
-    "in_progress": "🟡 В работе",
-    "done": "🟢 Готово",
-    "paused": "⏸ На паузе",
+TASK_COMPLETED_MAP = {
+    "todo": False,
+    "done": True,
 }
 
 
@@ -163,13 +159,13 @@ def _normalize_links(raw: list[str] | str | None) -> list[str]:
     return links[:8]
 
 
-def _task_text(task_id: int, title: str, status: str, priority: str, progress: int, obsidian_path: str) -> str:
+def _task_text(task_id: int, title: str, completed: bool, priority: str, obsidian_path: str) -> str:
+    status_label = "✅ Выполнена" if completed else "🕒 В процессе"
     return (
         f"✅ <b>{title}</b>\n"
         f"ID: {task_id}\n"
-        f"Статус: {status}\n"
+        f"Статус: {status_label}\n"
         f"Приоритет: {priority}\n"
-        f"Прогресс: {max(0, min(100, int(progress)))}%\n"
         f"Файл: <code>{obsidian_path}</code>"
     )
 
@@ -229,16 +225,6 @@ async def tasks_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return TASK_MENU
 
-    if data.startswith("tasks:progress:"):
-        task_id = int(data.split(":")[-1])
-        await edit_or_send(
-            update,
-            context,
-            "Выберите прогресс задачи:",
-            reply_markup=get_task_progress_keyboard(task_id),
-        )
-        return TASK_MENU
-
     if data.startswith("tasks:set_status:"):
         parts = data.split(":")
         if len(parts) != 4:
@@ -246,26 +232,11 @@ async def tasks_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             return TASK_MENU
         _, _, task_id_raw, status_key = parts
         task_id = int(task_id_raw)
-        new_status = TASK_STATUS_MAP.get(status_key)
-        if not new_status:
+        completed = TASK_COMPLETED_MAP.get(status_key)
+        if completed is None:
             await edit_or_send(update, context, "Неизвестный статус.")
             return TASK_MENU
-        await _set_task_status(update, context, task_id, new_status)
-        return TASK_MENU
-
-    if data.startswith("tasks:set_progress:"):
-        parts = data.split(":")
-        if len(parts) != 4:
-            await edit_or_send(update, context, "Не удалось разобрать команду прогресса.")
-            return TASK_MENU
-        _, _, task_id_raw, progress_raw = parts
-        task_id = int(task_id_raw)
-        try:
-            progress = max(0, min(100, int(progress_raw)))
-        except ValueError:
-            await edit_or_send(update, context, "Некорректное значение прогресса.")
-            return TASK_MENU
-        await _set_task_progress(update, context, task_id, progress)
+        await _set_task_completed(update, context, task_id, completed)
         return TASK_MENU
 
     if data.startswith("tasks:project:"):
@@ -350,6 +321,11 @@ async def tasks_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if text == "➕ Создать задачу":
         await _ask_project_selection(update, context)
         return TASK_PROJECT
+    if text == "⚙️ Настройки":
+        from bot.handlers.settings import settings_entry
+
+        await settings_entry(update, context)
+        return ConversationHandler.END
     if text == "◀️ Назад":
         await update.effective_message.reply_text("Главное меню", reply_markup=get_main_menu_keyboard())
         return ConversationHandler.END
@@ -595,7 +571,6 @@ async def _finalize_task_creation(update: Update, context: ContextTypes.DEFAULT_
 
     google_event_id = None
     calendar_note = ""
-    progress_value = 0
     if calendar_choice == "да":
         if deadline is None:
             calendar_note = "📅 Не добавил в Calendar: для события нужен дедлайн."
@@ -647,7 +622,7 @@ async def _finalize_task_creation(update: Update, context: ContextTypes.DEFAULT_
         description=description,
         deadline_iso=deadline.isoformat() if deadline else None,
         estimated_time=estimate,
-        progress=progress_value,
+        completed=False,
         created_at=created_at,
         tags=tags,
         links=links,
@@ -664,14 +639,13 @@ async def _finalize_task_creation(update: Update, context: ContextTypes.DEFAULT_
             task_type="task",
             deadline=deadline,
             estimated_time=estimate,
-            progress=progress_value,
             obsidian_path=relative_path,
             google_event_id=google_event_id,
         )
 
     sync_note = "✅ Sync в Dropbox выполнен." if write_result.synced else f"⚠️ Sync не выполнен: {write_result.sync_error}"
     await update.effective_message.reply_text(
-        f"Задача создана:\n\n{_task_text(task.id, task.title, task.status, task.priority, task.progress, task.obsidian_path)}\n\n{sync_note}\n{calendar_note}",
+        f"Задача создана:\n\n{_task_text(task.id, task.title, task.completed, task.priority, task.obsidian_path)}\n\n{sync_note}\n{calendar_note}",
         parse_mode="HTML",
     )
     await update.effective_message.reply_text("✅ Раздел задач", reply_markup=get_tasks_reply_keyboard())
@@ -728,7 +702,8 @@ async def _send_tasks_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     rows = []
     for task in tasks[:20]:
-        rows.append([InlineKeyboardButton(f"{task.status} {task.title} ({task.progress}%)", callback_data=f"tasks:open:{task.id}")])
+        status_icon = "✅" if task.completed else "🕒"
+        rows.append([InlineKeyboardButton(f"{status_icon} {task.title}", callback_data=f"tasks:open:{task.id}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="tasks:back")])
     await edit_or_send(update, context, "Список задач:", reply_markup=InlineKeyboardMarkup(rows))
 
@@ -742,47 +717,26 @@ async def _send_task_card(update: Update, context: ContextTypes.DEFAULT_TYPE, ta
     await edit_or_send(
         update,
         context,
-        _task_text(task.id, task.title, task.status, task.priority, task.progress, task.obsidian_path),
+        _task_text(task.id, task.title, task.completed, task.priority, task.obsidian_path),
         reply_markup=get_task_actions_keyboard(task.id),
     )
 
 
-async def _set_task_status(
+async def _set_task_completed(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     task_id: int,
-    status: str,
+    completed: bool,
 ) -> None:
     async with SessionLocal() as session:
         task = await get_task_by_id(session, task_id)
         if not task:
             await edit_or_send(update, context, "Задача не найдена.")
             return
-        if status == "🟢 Готово":
-            task.progress = 100
-        elif status == "🔴 Новая":
-            task.progress = 0
-        await update_task_status(session, task, status)
+        await update_task_completed(session, task, completed)
     if update.callback_query:
-        await update.callback_query.answer(f"Статус обновлён: {status}", show_alert=False)
-    await _send_task_card(update, context, task_id)
-
-
-async def _set_task_progress(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    task_id: int,
-    progress: int,
-) -> None:
-    async with SessionLocal() as session:
-        task = await get_task_by_id(session, task_id)
-        if not task:
-            await edit_or_send(update, context, "Задача не найдена.")
-            return
-        await update_task_progress(session, task, progress)
-
-    if update.callback_query:
-        await update.callback_query.answer(f"Прогресс: {progress}%", show_alert=False)
+        label = "✅ Выполнена" if completed else "🕒 В процессе"
+        await update.callback_query.answer(f"Статус обновлён: {label}", show_alert=False)
     await _send_task_card(update, context, task_id)
 
 

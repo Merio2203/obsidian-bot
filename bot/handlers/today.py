@@ -13,7 +13,7 @@ from bot.database import SessionLocal
 from bot.database.crud import (
     get_diary_entry_by_date,
     get_overdue_tasks,
-    get_tasks_in_status,
+    get_tasks_by_completed,
     get_tasks_with_deadline,
 )
 from bot.services.google_calendar import GoogleCalendarService
@@ -37,7 +37,8 @@ def _fmt_task_list(items, empty_text: str) -> str:  # type: ignore[no-untyped-de
     lines = []
     for task in items[:7]:
         deadline = task.deadline.isoformat() if task.deadline else "без дедлайна"
-        lines.append(f"- {task.title} ({task.priority}, {deadline}, прогресс {task.progress}%)")
+        status_label = "✅ выполнена" if task.completed else "🕒 в процессе"
+        lines.append(f"- {task.title} ({task.priority}, {deadline}, {status_label})")
     return "\n".join(lines)
 
 
@@ -56,7 +57,7 @@ async def build_today_dashboard_text() -> str:
     today = await _today_local_date()
     async with SessionLocal() as session:
         today_deadline_tasks = await get_tasks_with_deadline(session, today)
-        in_progress_tasks = await get_tasks_in_status(session, "🟡 В работе")
+        in_progress_tasks = await get_tasks_by_completed(session, False)
         overdue_tasks = await get_overdue_tasks(session, today)
         diary_entry = await get_diary_entry_by_date(session, today)
     try:

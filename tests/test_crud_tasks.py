@@ -6,7 +6,7 @@ from datetime import date
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from bot.database.crud import create_task, get_task_by_id, get_tasks, update_task_status
+from bot.database.crud import create_task, get_task_by_id, get_tasks, update_task_completed
 from bot.database.models import init_db
 
 
@@ -26,7 +26,6 @@ async def test_create_and_update_task() -> None:
                 task_type="task",
                 deadline=date(2026, 4, 7),
                 estimated_time=2.0,
-                progress=0,
                 obsidian_path="Входящие/new-task.md",
             )
             assert task.id > 0
@@ -38,10 +37,9 @@ async def test_create_and_update_task() -> None:
             tasks = await get_tasks(session)
             assert tasks
 
-            await update_task_status(session, task, "🟡 В работе")
+            await update_task_completed(session, task, True)
             updated = await get_task_by_id(session, task.id)
             assert updated is not None
-            assert updated.status == "🟡 В работе"
-            assert updated.progress == 0
+            assert updated.completed is True
 
         await engine.dispose()

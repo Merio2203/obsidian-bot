@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import bot.handlers.today as today_module
 from bot.config import settings
-from bot.database.crud import create_diary_entry, create_task, update_task_status
+from bot.database.crud import create_diary_entry, create_task, update_task_completed
 from bot.database.models import init_db
 
 
@@ -31,7 +31,6 @@ async def test_today_dashboard_contains_sections() -> None:
                 task_type="task",
                 deadline=today,
                 estimated_time=2.0,
-                progress=35,
                 obsidian_path="Входящие/release.md",
             )
             t2 = await create_task(
@@ -42,10 +41,9 @@ async def test_today_dashboard_contains_sections() -> None:
                 task_type="task",
                 deadline=today - timedelta(days=1),
                 estimated_time=1.0,
-                progress=15,
                 obsidian_path="Входящие/debt.md",
             )
-            await update_task_status(session, t2, "🟡 В работе")
+            await update_task_completed(session, t2, False)
             await create_diary_entry(session, today, f"Дневник/{today.isoformat()}.md")
 
         old_factory = today_module.SessionLocal

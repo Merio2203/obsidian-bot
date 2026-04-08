@@ -21,7 +21,7 @@ from telegram.ext import (
 
 from bot.config import PROJECT_SUBFOLDERS, VAULT_FOLDERS
 from bot.database import SessionLocal
-from bot.database.crud import create_project, get_project_by_name
+from bot.database.crud import create_project, get_project_by_name, get_tasks
 from bot.services.obsidian_service import ObsidianService, sync_db_with_vault
 from bot.utils.decorators import owner_only
 from bot.utils.formatters import render_project_overview_markdown
@@ -139,6 +139,20 @@ async def projects_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
         await _send_project_card(update, context, idx)
         return PROJECT_MENU
 
+    if data == "projects:open_current":
+        current_name = context.user_data.get("current_project_name")
+        index_map: dict[str, dict[str, str]] = context.user_data.get("projects_index", {})
+        current_idx = None
+        for idx, payload in index_map.items():
+            if payload.get("name") == current_name:
+                current_idx = idx
+                break
+        if current_idx is None:
+            await _send_projects_list(update, context, include_hint=False)
+            return PROJECT_MENU
+        await _send_project_card(update, context, current_idx)
+        return PROJECT_MENU
+
     if data == "projects:repo:skip":
         context.user_data["project_repo_raw"] = "-"
         if update.callback_query and update.callback_query.message:
@@ -163,7 +177,7 @@ async def projects_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
         return PROJECT_MENU
 
     if data == "projects:tasks_current":
-        await update.callback_query.answer("Раздел задач проекта подключим следующим шагом.", show_alert=False)
+        await _show_current_project_tasks(update, context)
         return PROJECT_MENU
 
     return PROJECT_MENU
@@ -181,6 +195,11 @@ async def projects_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if text == "📋 Список проектов":
         await _send_projects_list(update, context, include_hint=False)
         return PROJECT_MENU
+    if text == "⚙️ Настройки":
+        from bot.handlers.settings import settings_entry
+
+        await settings_entry(update, context)
+        return ConversationHandler.END
     if text == "◀️ Назад":
         await update.effective_message.reply_text("Главное меню", reply_markup=get_main_menu_keyboard())
         return ConversationHandler.END
@@ -412,6 +431,46 @@ async def _set_project_status(
     await sync_db_with_vault()
     await update.callback_query.answer(f"Статус обновлён: {status}", show_alert=False)
     await _send_projects_list(update, context, include_hint=False)
+
+
+async def _show_current_project_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Показывает список задач выбранного проекта."""
+    project_name = context.user_data.get("current_project_name")
+    if not project_name:
+        await edit_or_send(update, context, "Сначала выберите проект из списка.")
+        return
+
+    async with SessionLocal() as session:
+        project = await get_project_by_name(session, project_name)
+        tasks = await get_tasks(session)
+
+    if project is not None:
+        project_tasks = [task for task in tasks if task.project_id == project.id]
+    else:
+        project_dir = ObsidianService.sanitize_filename(project_name)
+        prefix = f"{VAULT_FOLDERS['projects']}/{project_dir}/{PROJECT_SUBFOLDERS[0]}/"
+        project_tasks = [task for task in tasks if str(task.obsidian_path).startswith(prefix)]
+
+    if not project_tasks:
+        await edit_or_send(
+            update,
+            context,
+            f"У проекта «{project_name}» пока нет задач.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ К проекту", callback_data="projects:open_current")]]),
+        )
+        return
+
+    lines = []
+    for task in project_tasks[:25]:
+        status_icon = "✅" if task.completed else "🕒"
+        lines.append(f"- {status_icon} {task.title} ({task.priority})")
+    text = f"✅ Задачи проекта «{project_name}»:\n\n" + "\n".join(lines)
+    await edit_or_send(
+        update,
+        context,
+        text,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ К проекту", callback_data="projects:open_current")]]),
+    )
 
 
 def register_projects_handlers(application: Application) -> None:

@@ -160,13 +160,11 @@ def get_task_deadline_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_task_status_keyboard(task_id: int) -> InlineKeyboardMarkup:
-    """Inline-клавиатура выбора статуса задачи."""
+    """Inline-клавиатура переключения завершенности задачи."""
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🔴 Новая", callback_data=f"tasks:set_status:{task_id}:new")],
-            [InlineKeyboardButton("🟡 В работе", callback_data=f"tasks:set_status:{task_id}:in_progress")],
-            [InlineKeyboardButton("🟢 Готово", callback_data=f"tasks:set_status:{task_id}:done")],
-            [InlineKeyboardButton("⏸ На паузе", callback_data=f"tasks:set_status:{task_id}:paused")],
+            [InlineKeyboardButton("✅ Выполнена", callback_data=f"tasks:set_status:{task_id}:done")],
+            [InlineKeyboardButton("↩️ Вернуть в работу", callback_data=f"tasks:set_status:{task_id}:todo")],
         ]
     )
 
@@ -176,26 +174,7 @@ def get_task_actions_keyboard(task_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("🔄 Изменить статус", callback_data=f"tasks:status:{task_id}")],
-            [InlineKeyboardButton("📈 Прогресс", callback_data=f"tasks:progress:{task_id}")],
             [InlineKeyboardButton("⬅️ К списку", callback_data="tasks:list")],
-        ]
-    )
-
-
-def get_task_progress_keyboard(task_id: int) -> InlineKeyboardMarkup:
-    """Inline-клавиатура выбора прогресса задачи."""
-    return InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("0%", callback_data=f"tasks:set_progress:{task_id}:0"),
-                InlineKeyboardButton("25%", callback_data=f"tasks:set_progress:{task_id}:25"),
-                InlineKeyboardButton("50%", callback_data=f"tasks:set_progress:{task_id}:50"),
-            ],
-            [
-                InlineKeyboardButton("75%", callback_data=f"tasks:set_progress:{task_id}:75"),
-                InlineKeyboardButton("100%", callback_data=f"tasks:set_progress:{task_id}:100"),
-            ],
-            [InlineKeyboardButton("⬅️ К задаче", callback_data=f"tasks:open:{task_id}")],
         ]
     )
 

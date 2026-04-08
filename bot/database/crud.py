@@ -67,7 +67,6 @@ async def create_task(
     task_type: str,
     deadline,
     estimated_time: float | None,
-    progress: int,
     obsidian_path: str,
     google_event_id: str | None = None,
 ) -> Task:
@@ -75,12 +74,11 @@ async def create_task(
     task = Task(
         project_id=project_id,
         title=title,
-        status="🔴 Новая",
+        completed=False,
         priority=priority,
         type=task_type,
         deadline=deadline,
         estimated_time=estimated_time,
-        progress=progress,
         obsidian_path=obsidian_path,
         google_event_id=google_event_id,
     )
@@ -102,17 +100,9 @@ async def get_task_by_id(session: AsyncSession, task_id: int) -> Task | None:
     return result.scalar_one_or_none()
 
 
-async def update_task_status(session: AsyncSession, task: Task, status: str) -> Task:
-    """Обновляет статус задачи."""
-    task.status = status
-    await session.commit()
-    await session.refresh(task)
-    return task
-
-
-async def update_task_progress(session: AsyncSession, task: Task, progress: int) -> Task:
-    """Обновляет прогресс задачи (0..100)."""
-    task.progress = max(0, min(100, int(progress)))
+async def update_task_completed(session: AsyncSession, task: Task, completed: bool) -> Task:
+    """Обновляет признак завершения задачи."""
+    task.completed = bool(completed)
     await session.commit()
     await session.refresh(task)
     return task
@@ -177,10 +167,10 @@ async def create_resource(
     return resource
 
 
-async def get_tasks_in_status(session: AsyncSession, status: str) -> Sequence[Task]:
-    """Возвращает задачи в конкретном статусе."""
+async def get_tasks_by_completed(session: AsyncSession, completed: bool) -> Sequence[Task]:
+    """Возвращает задачи по признаку завершения."""
     result = await session.execute(
-        select(Task).where(Task.status == status).order_by(Task.created_at.desc())
+        select(Task).where(Task.completed.is_(bool(completed))).order_by(Task.created_at.desc())
     )
     return list(result.scalars().all())
 
@@ -199,7 +189,7 @@ async def get_overdue_tasks(session: AsyncSession, today_date: date) -> Sequence
         select(Task)
         .where(Task.deadline.is_not(None))
         .where(Task.deadline < today_date)
-        .where(Task.status != "🟢 Готово")
+        .where(Task.completed.is_(False))
         .order_by(Task.deadline.asc())
     )
     return list(result.scalars().all())

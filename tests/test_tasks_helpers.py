@@ -45,15 +45,15 @@ def test_render_task_markdown() -> None:
         description="Нужно реализовать эндпоинт",
         deadline_iso="2026-04-10",
         estimated_time=3.5,
-        progress=20,
+        completed=False,
         created_at="2026-04-06 10:00",
         tags=["backend", "api"],
         links=["[[CRM]]", "[[Сделать API]]"],
     )
     assert "title: Сделать API" in markdown
     assert 'project: "[[Проект CRM]]"' in markdown
+    assert "completed: false" in markdown
     assert "tags: [backend, api]" in markdown
-    assert "progress: 20" in markdown
     assert '  - "[[CRM]]"' in markdown
     assert '  - "[[Сделать API]]"' in markdown
 

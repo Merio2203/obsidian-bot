@@ -37,14 +37,14 @@ class FakeUpdate:
 async def test_tasks_set_status_callback_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
     called = {"value": False}
 
-    async def fake_set_task_status(update, context, task_id: int, status: str) -> None:  # type: ignore[no-untyped-def]
+    async def fake_set_task_completed(update, context, task_id: int, completed: bool) -> None:  # type: ignore[no-untyped-def]
         called["value"] = True
         assert task_id == 123
-        assert status == "🔴 Новая"
+        assert completed is True
 
-    monkeypatch.setattr(tasks_module, "_set_task_status", fake_set_task_status)
+    monkeypatch.setattr(tasks_module, "_set_task_completed", fake_set_task_completed)
 
-    update = FakeUpdate(user_id=42, data="tasks:set_status:123:new")
+    update = FakeUpdate(user_id=42, data="tasks:set_status:123:done")
     context = types.SimpleNamespace(user_data={})
     await tasks_module.tasks_menu_callback(update, context)
 

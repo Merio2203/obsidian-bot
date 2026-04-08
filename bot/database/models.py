@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -40,19 +40,18 @@ class Task(Base):
 
     __tablename__ = "tasks"
     __table_args__ = (
-        Index("ix_tasks_status", "status"),
+        Index("ix_tasks_completed", "completed"),
         Index("ix_tasks_deadline", "deadline"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_id: Mapped[Optional[int]] = mapped_column(ForeignKey("projects.id"), nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    status: Mapped[str] = mapped_column(String(64), nullable=False, default="🔴 Новая")
+    completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     priority: Mapped[str] = mapped_column(String(64), nullable=False, default="⚡ Средний")
     type: Mapped[str] = mapped_column(String(32), nullable=False, default="task")
     deadline: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     estimated_time: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     obsidian_path: Mapped[str] = mapped_column(String(512), nullable=False)
     google_event_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
@@ -128,8 +127,13 @@ async def init_db(engine: AsyncEngine) -> None:
         # Эволюция схемы без Alembic для уже существующих БД.
         columns_rs = await conn.exec_driver_sql("PRAGMA table_info(tasks)")
         existing_columns = {row[1] for row in columns_rs.fetchall()}
-        if "progress" not in existing_columns:
-            await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
+        if "completed" not in existing_columns:
+            await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN completed INTEGER NOT NULL DEFAULT 0")
+        # Миграция старого строкового статуса в boolean completed.
+        if "status" in existing_columns:
+            await conn.exec_driver_sql(
+                "UPDATE tasks SET completed = CASE WHEN status = '🟢 Готово' THEN 1 ELSE completed END"
+            )
 
 
 ModelType = Any
