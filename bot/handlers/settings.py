@@ -16,7 +16,7 @@ from telegram.ext import (
 )
 
 from bot.database import SessionLocal
-from bot.services.obsidian_service import ObsidianService
+from bot.services.obsidian_service import ObsidianService, sync_db_with_vault
 from bot.services.settings_service import SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.keyboards import get_main_menu_keyboard
@@ -136,8 +136,9 @@ async def settings_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     if data == "settings:sync":
         obsidian = ObsidianService()
-        ok, err = await obsidian.sync_to_dropbox()
-        text = "✅ Sync выполнен." if ok else f"⚠️ Ошибка sync: {err}"
+        ok, err = await obsidian.sync_bidirectional()
+        await sync_db_with_vault()
+        text = "✅ Sync выполнен. БД обновлена по vault." if ok else f"⚠️ Ошибка sync: {err}\nБД обновлена из доступных файлов."
         cfg = await service.get_runtime_settings()
         await query.message.reply_text(text, reply_markup=_settings_keyboard(cfg.log_level))
         return SETTINGS_MENU

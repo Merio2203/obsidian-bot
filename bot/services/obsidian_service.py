@@ -8,10 +8,11 @@ import os
 import re
 import tempfile
 import unicodedata
+from datetime import date
 from dataclasses import dataclass
 from pathlib import Path
 
-from bot.config import VAULT_FOLDERS, settings
+from bot.config import PROJECT_SUBFOLDERS, VAULT_FOLDERS, settings
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +262,42 @@ class ObsidianService:
             if tmp_file and os.path.exists(tmp_file):
                 os.unlink(tmp_file)
 
+    @staticmethod
+    def parse_frontmatter(markdown: str) -> dict[str, str]:
+        """Извлекает плоский YAML frontmatter (ключ: значение) из markdown."""
+        text = markdown.lstrip()
+        if not text.startswith("---\n"):
+            return {}
+        end_idx = text.find("\n---", 4)
+        if end_idx == -1:
+            return {}
+        block = text[4:end_idx]
+        result: dict[str, str] = {}
+        for line in block.splitlines():
+            if ":" not in line:
+                continue
+            key, value = line.split(":", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key:
+                result[key] = value
+        return result
+
+    @staticmethod
+    def parse_completed_value(raw: str | None) -> bool:
+        """Преобразует строку completed/status в bool."""
+        if raw is None:
+            return False
+        val = raw.strip().lower()
+        if val in {"true", "1", "yes", "да"}:
+            return True
+        if val in {"false", "0", "no", "нет", ""}:
+            return False
+        # Backward compatibility для старых markdown status-значений.
+        if "готов" in val:
+            return True
+        return False
+
 
 async def sync_db_with_vault() -> None:
     """
@@ -307,11 +344,99 @@ async def sync_db_with_vault() -> None:
                     )
                 )
 
+        # Нужны id добавленных проектов для привязки задач.
+        await session.flush()
+        projects_by_name = {p.name: p for p in (await session.execute(select(Project))).scalars().all()}
+
+        # Обновляем/добавляем задачи из markdown-файлов vault.
+        discovered_task_paths: set[str] = set()
+        all_md_files = await asyncio.to_thread(lambda: list(service.vault_path.rglob("*.md")))
+        for abs_file in all_md_files:
+            try:
+                rel_path = abs_file.relative_to(service.vault_path).as_posix()
+            except ValueError:
+                continue
+
+            is_project_task = rel_path.startswith(f"{VAULT_FOLDERS['projects']}/") and f"/{PROJECT_SUBFOLDERS[0]}/" in rel_path
+            is_inbox = rel_path.startswith(f"{VAULT_FOLDERS['inbox']}/")
+            if not (is_project_task or is_inbox):
+                continue
+
+            content = await asyncio.to_thread(abs_file.read_text, "utf-8")
+            meta = ObsidianService.parse_frontmatter(content)
+            task_type = (meta.get("type") or "").strip().lower()
+            if task_type and task_type not in {"task", "cursor_prompt"}:
+                continue
+
+            discovered_task_paths.add(rel_path)
+
+            raw_title = (meta.get("title") or "").strip()
+            title = raw_title or abs_file.stem
+            priority = (meta.get("priority") or "⚡ Средний").strip() or "⚡ Средний"
+            completed = ObsidianService.parse_completed_value(meta.get("completed"))
+            deadline_raw = (meta.get("deadline") or "").strip()
+            deadline_value = None
+            if deadline_raw:
+                try:
+                    deadline_value = date.fromisoformat(deadline_raw)
+                except ValueError:
+                    deadline_value = None
+            estimate_raw = (meta.get("estimated_time") or "").strip()
+            estimate_value = None
+            if estimate_raw:
+                try:
+                    estimate_value = float(estimate_raw.replace(",", "."))
+                except ValueError:
+                    estimate_value = None
+
+            google_event_id = (meta.get("google_calendar_id") or "").strip() or None
+            normalized_type = task_type or "task"
+            status_legacy = "🟢 Готово" if completed else "🕒 В процессе"
+
+            project_id = None
+            if is_project_task:
+                parts = rel_path.split("/")
+                if len(parts) >= 3:
+                    project_name = parts[1]
+                    project_obj = projects_by_name.get(project_name)
+                    if project_obj:
+                        project_id = project_obj.id
+
+            existing_task = (
+                await session.execute(select(Task).where(Task.obsidian_path == rel_path))
+            ).scalar_one_or_none()
+            if existing_task:
+                existing_task.project_id = project_id
+                existing_task.title = title
+                existing_task.priority = priority
+                existing_task.type = normalized_type
+                existing_task.deadline = deadline_value
+                existing_task.estimated_time = estimate_value
+                existing_task.completed = completed
+                existing_task.status = status_legacy
+                existing_task.google_event_id = google_event_id
+            else:
+                session.add(
+                    Task(
+                        project_id=project_id,
+                        title=title,
+                        status=status_legacy,
+                        completed=completed,
+                        priority=priority,
+                        type=normalized_type,
+                        deadline=deadline_value,
+                        estimated_time=estimate_value,
+                        obsidian_path=rel_path,
+                        google_event_id=google_event_id,
+                    )
+                )
+
+        # Удаляем задачи из БД, файлов которых больше нет.
         db_tasks = list((await session.execute(select(Task))).scalars().all())
         for task in db_tasks:
             task_path = service.vault_path / task.obsidian_path
             exists = await asyncio.to_thread(task_path.exists)
-            if not exists:
+            if not exists or (discovered_task_paths and task.obsidian_path not in discovered_task_paths):
                 await session.delete(task)
 
         await session.commit()

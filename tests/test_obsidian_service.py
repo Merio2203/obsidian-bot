@@ -62,3 +62,20 @@ async def test_get_projects_from_vault(tmp_path: Path) -> None:
 def test_sanitize_filename() -> None:
     assert ObsidianService.sanitize_filename("  🚀 Тест: идея / 2026  ") == "Тест идея 2026"
     assert ObsidianService.slugify_filename("  🚀 Тест: идея / 2026  ") == "тест-идея-2026"
+
+
+def test_parse_frontmatter_and_completed() -> None:
+    markdown = (
+        "---\n"
+        "title: Тестовая задача\n"
+        "completed: true\n"
+        "priority: ⚡ Средний\n"
+        "---\n\n"
+        "Контент\n"
+    )
+    meta = ObsidianService.parse_frontmatter(markdown)
+    assert meta["title"] == "Тестовая задача"
+    assert meta["priority"] == "⚡ Средний"
+    assert ObsidianService.parse_completed_value(meta.get("completed")) is True
+    assert ObsidianService.parse_completed_value("🟢 Готово") is True
+    assert ObsidianService.parse_completed_value("false") is False
