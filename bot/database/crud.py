@@ -74,6 +74,7 @@ async def create_task(
     task = Task(
         project_id=project_id,
         title=title,
+        status="🕒 В процессе",
         completed=False,
         priority=priority,
         type=task_type,
@@ -103,6 +104,7 @@ async def get_task_by_id(session: AsyncSession, task_id: int) -> Task | None:
 async def update_task_completed(session: AsyncSession, task: Task, completed: bool) -> Task:
     """Обновляет признак завершения задачи."""
     task.completed = bool(completed)
+    task.status = "🟢 Готово" if task.completed else "🕒 В процессе"
     await session.commit()
     await session.refresh(task)
     return task

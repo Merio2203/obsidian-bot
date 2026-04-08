@@ -47,6 +47,9 @@ class Task(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_id: Mapped[Optional[int]] = mapped_column(ForeignKey("projects.id"), nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Legacy-колонка для обратной совместимости существующих SQLite БД.
+    # Основная бизнес-логика использует completed.
+    status: Mapped[str] = mapped_column(String(64), nullable=False, default="🕒 В процессе")
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     priority: Mapped[str] = mapped_column(String(64), nullable=False, default="⚡ Средний")
     type: Mapped[str] = mapped_column(String(32), nullable=False, default="task")
@@ -133,6 +136,10 @@ async def init_db(engine: AsyncEngine) -> None:
         if "status" in existing_columns:
             await conn.exec_driver_sql(
                 "UPDATE tasks SET completed = CASE WHEN status = '🟢 Готово' THEN 1 ELSE completed END"
+            )
+        if "status" in existing_columns:
+            await conn.exec_driver_sql(
+                "UPDATE tasks SET status = CASE WHEN completed = 1 THEN '🟢 Готово' ELSE '🕒 В процессе' END"
             )
 
 
