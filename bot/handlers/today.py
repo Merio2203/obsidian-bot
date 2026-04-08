@@ -37,7 +37,7 @@ def _fmt_task_list(items, empty_text: str) -> str:  # type: ignore[no-untyped-de
     lines = []
     for task in items[:7]:
         deadline = task.deadline.isoformat() if task.deadline else "без дедлайна"
-        lines.append(f"- {task.title} ({task.priority}, {deadline})")
+        lines.append(f"- {task.title} ({task.priority}, {deadline}, прогресс {task.progress}%)")
     return "\n".join(lines)
 
 

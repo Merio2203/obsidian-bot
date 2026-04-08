@@ -111,6 +111,7 @@ async def ask_for_input(
     prompt: str,
     state: int | None = None,
     cancel_callback: str = "cancel",
+    inline_keyboard: InlineKeyboardMarkup | None = None,
 ) -> Message | None:
     """
     Универсальный запрос ввода:
@@ -132,7 +133,8 @@ async def ask_for_input(
     except Exception:
         logger.debug("Не удалось удалить техническое сообщение скрытия клавиатуры", exc_info=True)
 
-    return await anchor.reply_text(prompt, reply_markup=get_cancel_keyboard(cancel_callback))
+    markup = inline_keyboard or get_cancel_keyboard(cancel_callback)
+    return await anchor.reply_text(prompt, reply_markup=markup)
 
 
 async def handle_unexpected_menu_button(

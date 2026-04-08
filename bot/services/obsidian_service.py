@@ -56,12 +56,25 @@ class ObsidianService:
         Атомарно записывает markdown в vault и запускает sync.
         Ошибка sync не ломает запись, а возвращается в результате.
         """
+        pull_ok, pull_error = await self.sync_from_dropbox()
+        if not pull_ok and pull_error:
+            logger.warning("Предварительный sync из Dropbox завершился с ошибкой: %s", pull_error)
+
         target = self.vault_path / Path(relative_path)
         await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
         await asyncio.to_thread(self._atomic_write, target, content)
 
-        synced, sync_error = await self.sync_to_dropbox()
-        return WriteResult(path=target, synced=synced, sync_error=sync_error)
+        push_ok, push_error = await self.sync_to_dropbox()
+        errors = []
+        if pull_error:
+            errors.append(f"pull: {pull_error}")
+        if push_error:
+            errors.append(f"push: {push_error}")
+        return WriteResult(
+            path=target,
+            synced=pull_ok and push_ok,
+            sync_error="; ".join(errors) if errors else None,
+        )
 
     async def read_markdown(self, relative_path: str | Path) -> str:
         """Читает markdown из vault."""
@@ -190,6 +203,40 @@ class ObsidianService:
             logger.error("Ошибка rclone sync: %s", error_text, exc_info=True)
             return False, error_text
         return True, None
+
+    async def sync_from_dropbox(self) -> tuple[bool, str | None]:
+        """
+        Подтягивает изменения из Dropbox в локальный vault.
+        Использует copy + --update, чтобы не перезаписывать более новые локальные файлы.
+        """
+        process = await asyncio.create_subprocess_exec(
+            "rclone",
+            "copy",
+            f"dropbox:{settings.dropbox_vault_path}",
+            str(self.vault_path),
+            "--update",
+            "--create-empty-src-dirs",
+            "--quiet",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await process.communicate()
+        if process.returncode != 0:
+            error_text = stderr.decode("utf-8", errors="ignore").strip() or "unknown error"
+            logger.error("Ошибка rclone pull: %s", error_text, exc_info=True)
+            return False, error_text
+        return True, None
+
+    async def sync_bidirectional(self) -> tuple[bool, str | None]:
+        """Двусторонняя синхронизация: сначала pull, затем push."""
+        pull_ok, pull_error = await self.sync_from_dropbox()
+        push_ok, push_error = await self.sync_to_dropbox()
+        errors = []
+        if pull_error:
+            errors.append(f"pull: {pull_error}")
+        if push_error:
+            errors.append(f"push: {push_error}")
+        return pull_ok and push_ok, "; ".join(errors) if errors else None
 
     @staticmethod
     def _atomic_write(path: Path, content: str) -> None:

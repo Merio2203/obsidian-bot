@@ -92,6 +92,7 @@ def render_task_markdown(
     description: str,
     deadline_iso: str | None,
     estimated_time: float | None,
+    progress: int,
     created_at: str,
     tags: list[str],
     links: list[str],
@@ -118,6 +119,7 @@ def render_task_markdown(
         f"type: {task_type}\n"
         f"deadline: {deadline_line}\n"
         f"estimated_time: {estimated_line}\n"
+        f"progress: {max(0, min(100, int(progress)))}\n"
         f"created: {created_at}\n"
         f"tags: [{tags_line}]\n"
         f"{links_block}\n"

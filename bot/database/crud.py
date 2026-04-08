@@ -67,6 +67,7 @@ async def create_task(
     task_type: str,
     deadline,
     estimated_time: float | None,
+    progress: int,
     obsidian_path: str,
     google_event_id: str | None = None,
 ) -> Task:
@@ -79,6 +80,7 @@ async def create_task(
         type=task_type,
         deadline=deadline,
         estimated_time=estimated_time,
+        progress=progress,
         obsidian_path=obsidian_path,
         google_event_id=google_event_id,
     )
@@ -103,6 +105,14 @@ async def get_task_by_id(session: AsyncSession, task_id: int) -> Task | None:
 async def update_task_status(session: AsyncSession, task: Task, status: str) -> Task:
     """Обновляет статус задачи."""
     task.status = status
+    await session.commit()
+    await session.refresh(task)
+    return task
+
+
+async def update_task_progress(session: AsyncSession, task: Task, progress: int) -> Task:
+    """Обновляет прогресс задачи (0..100)."""
+    task.progress = max(0, min(100, int(progress)))
     await session.commit()
     await session.refresh(task)
     return task

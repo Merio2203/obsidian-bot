@@ -52,6 +52,7 @@ class Task(Base):
     type: Mapped[str] = mapped_column(String(32), nullable=False, default="task")
     deadline: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     estimated_time: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     obsidian_path: Mapped[str] = mapped_column(String(512), nullable=False)
     google_event_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
@@ -124,6 +125,11 @@ async def init_db(engine: AsyncEngine) -> None:
     """Создает все таблицы в БД (этап 1 без миграций)."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Эволюция схемы без Alembic для уже существующих БД.
+        columns_rs = await conn.exec_driver_sql("PRAGMA table_info(tasks)")
+        existing_columns = {row[1] for row in columns_rs.fetchall()}
+        if "progress" not in existing_columns:
+            await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
 
 
 ModelType = Any

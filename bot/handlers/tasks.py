@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from typing import Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -25,6 +25,7 @@ from bot.database.crud import (
     get_projects,
     get_task_by_id,
     get_tasks,
+    update_task_progress,
     update_task_status,
 )
 from bot.services.ai_service import AIService
@@ -45,14 +46,31 @@ from bot.utils.keyboards import (
     get_task_actions_keyboard,
     get_task_project_select_keyboard,
     get_task_calendar_keyboard,
+    get_task_deadline_keyboard,
     get_task_priority_keyboard,
+    get_task_progress_keyboard,
     get_task_status_keyboard,
     get_tasks_reply_keyboard,
+    get_default_skip_keyboard,
 )
 
 logger = logging.getLogger(__name__)
 
-TASK_MENU, TASK_PROJECT, TASK_TITLE, TASK_DESCRIPTION, TASK_PRIORITY, TASK_DEADLINE, TASK_ESTIMATE, TASK_CALENDAR = range(8)
+DEFAULT_INPUT_TOKEN = "-"
+DEFAULT_SKIP_TEXT = "⏭ Пропустить"
+
+(
+    TASK_MENU,
+    TASK_PROJECT,
+    TASK_TITLE,
+    TASK_DESCRIPTION,
+    TASK_PRIORITY,
+    TASK_DEADLINE,
+    TASK_ESTIMATE,
+    TASK_CALENDAR,
+    TASK_CALENDAR_START,
+    TASK_CALENDAR_END,
+) = range(10)
 
 TASK_STATUS_MAP = {
     "new": "🔴 Новая",
@@ -65,20 +83,31 @@ TASK_STATUS_MAP = {
 def _parse_deadline(raw: str) -> Optional[date]:
     """Парсит дату дедлайна в формате ДД.ММ.ГГГГ."""
     value = raw.strip()
-    if value == "-":
+    normalized = value.lower()
+    if value == DEFAULT_INPUT_TOKEN or value == DEFAULT_SKIP_TEXT:
         return None
+    if normalized == "сегодня":
+        return datetime.now().date()
+    if normalized == "завтра":
+        return (datetime.now() + timedelta(days=1)).date()
     return datetime.strptime(value, "%d.%m.%Y").date()
 
 
 def _parse_estimate(raw: str) -> Optional[float]:
     """Парсит оценку времени в часах."""
     value = raw.strip()
-    if value == "-":
+    if value == DEFAULT_INPUT_TOKEN or value == DEFAULT_SKIP_TEXT:
         return None
     hours = float(value.replace(",", "."))
     if hours < 0:
         raise ValueError("Оценка времени не может быть отрицательной")
     return hours
+
+
+def _parse_time_value(raw: str) -> time:
+    """Парсит время в формате HH:MM."""
+    value = raw.strip()
+    return datetime.strptime(value, "%H:%M").time()
 
 
 def _normalize_tags(raw: list[str] | str | None) -> list[str]:
@@ -134,12 +163,13 @@ def _normalize_links(raw: list[str] | str | None) -> list[str]:
     return links[:8]
 
 
-def _task_text(task_id: int, title: str, status: str, priority: str, obsidian_path: str) -> str:
+def _task_text(task_id: int, title: str, status: str, priority: str, progress: int, obsidian_path: str) -> str:
     return (
         f"✅ <b>{title}</b>\n"
         f"ID: {task_id}\n"
         f"Статус: {status}\n"
         f"Приоритет: {priority}\n"
+        f"Прогресс: {max(0, min(100, int(progress)))}%\n"
         f"Файл: <code>{obsidian_path}</code>"
     )
 
@@ -199,6 +229,16 @@ async def tasks_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return TASK_MENU
 
+    if data.startswith("tasks:progress:"):
+        task_id = int(data.split(":")[-1])
+        await edit_or_send(
+            update,
+            context,
+            "Выберите прогресс задачи:",
+            reply_markup=get_task_progress_keyboard(task_id),
+        )
+        return TASK_MENU
+
     if data.startswith("tasks:set_status:"):
         parts = data.split(":")
         if len(parts) != 4:
@@ -213,12 +253,90 @@ async def tasks_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await _set_task_status(update, context, task_id, new_status)
         return TASK_MENU
 
+    if data.startswith("tasks:set_progress:"):
+        parts = data.split(":")
+        if len(parts) != 4:
+            await edit_or_send(update, context, "Не удалось разобрать команду прогресса.")
+            return TASK_MENU
+        _, _, task_id_raw, progress_raw = parts
+        task_id = int(task_id_raw)
+        try:
+            progress = max(0, min(100, int(progress_raw)))
+        except ValueError:
+            await edit_or_send(update, context, "Некорректное значение прогресса.")
+            return TASK_MENU
+        await _set_task_progress(update, context, task_id, progress)
+        return TASK_MENU
+
     if data.startswith("tasks:project:"):
         project_raw = data.split(":", 2)[-1]
         project_id = None if project_raw == "none" else int(project_raw)
         context.user_data["task_project_id"] = project_id
         await ask_for_input(update, context, "Введите название задачи:", state=TASK_TITLE)
         return TASK_TITLE
+
+    if data == "tasks:deadline:today":
+        context.user_data["task_deadline"] = datetime.now().date()
+        await ask_for_input(
+            update,
+            context,
+            "Введите оценку времени в часах (например 2 или 1.5) либо '-'",
+            state=TASK_ESTIMATE,
+            inline_keyboard=get_default_skip_keyboard("tasks:estimate:skip"),
+        )
+        return TASK_ESTIMATE
+
+    if data == "tasks:deadline:tomorrow":
+        context.user_data["task_deadline"] = (datetime.now() + timedelta(days=1)).date()
+        await ask_for_input(
+            update,
+            context,
+            "Введите оценку времени в часах (например 2 или 1.5) либо '-'",
+            state=TASK_ESTIMATE,
+            inline_keyboard=get_default_skip_keyboard("tasks:estimate:skip"),
+        )
+        return TASK_ESTIMATE
+
+    if data == "tasks:deadline:skip":
+        context.user_data["task_deadline"] = None
+        await ask_for_input(
+            update,
+            context,
+            "Введите оценку времени в часах (например 2 или 1.5) либо '-'",
+            state=TASK_ESTIMATE,
+            inline_keyboard=get_default_skip_keyboard("tasks:estimate:skip"),
+        )
+        return TASK_ESTIMATE
+
+    if data == "tasks:estimate:skip":
+        context.user_data["task_estimate"] = None
+        if update.callback_query and update.callback_query.message:
+            await update.callback_query.message.reply_text(
+                "Добавить задачу в Google Календарь?",
+                reply_markup=get_task_calendar_keyboard(),
+            )
+        return TASK_CALENDAR
+
+    if data == "tasks:calendar_start:skip":
+        context.user_data["task_calendar_start"] = time(10, 0)
+        if update.callback_query and update.callback_query.message:
+            await ask_for_input(
+                update,
+                context,
+                "Укажите время окончания события в формате ЧЧ:ММ (например 11:00):",
+                state=TASK_CALENDAR_END,
+                inline_keyboard=get_default_skip_keyboard("tasks:calendar_end:skip", button_text="⏭ По умолчанию +1 час"),
+            )
+        return TASK_CALENDAR_END
+
+    if data == "tasks:calendar_end:skip":
+        start_value = context.user_data.get("task_calendar_start") or time(10, 0)
+        if isinstance(start_value, time):
+            start_dt = datetime.combine(datetime.now().date(), start_value)
+            context.user_data["task_calendar_end"] = (start_dt + timedelta(hours=1)).time()
+        else:
+            context.user_data["task_calendar_end"] = time(11, 0)
+        return await _finalize_task_creation(update, context)
 
     return TASK_MENU
 
@@ -300,8 +418,9 @@ async def create_task_priority(update: Update, context: ContextTypes.DEFAULT_TYP
     await ask_for_input(
         update,
         context,
-        "Введите дедлайн в формате ДД.ММ.ГГГГ или '-' если без дедлайна:",
+        "Введите дедлайн в формате ДД.ММ.ГГГГ.\nМожно нажать «Сегодня» или «Завтра». Для пропуска — «Без дедлайна».",
         state=TASK_DEADLINE,
+        inline_keyboard=get_task_deadline_keyboard(),
     )
     return TASK_DEADLINE
 
@@ -325,6 +444,7 @@ async def create_task_deadline(update: Update, context: ContextTypes.DEFAULT_TYP
         context,
         "Введите оценку времени в часах (например 2 или 1.5) либо '-'",
         state=TASK_ESTIMATE,
+        inline_keyboard=get_default_skip_keyboard("tasks:estimate:skip"),
     )
     return TASK_ESTIMATE
 
@@ -352,7 +472,7 @@ async def create_task_estimate(update: Update, context: ContextTypes.DEFAULT_TYP
 
 @owner_only
 async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Финализирует создание задачи."""
+    """Обрабатывает решение по добавлению в Calendar и (при необходимости) запрашивает время."""
     if not update.effective_message or not update.effective_message.text:
         return TASK_CALENDAR
 
@@ -360,6 +480,63 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
     if calendar_choice not in ("да", "нет"):
         await update.effective_message.reply_text("Выберите 'Да' или 'Нет'.", reply_markup=get_task_calendar_keyboard())
         return TASK_CALENDAR
+    context.user_data["task_calendar_choice"] = calendar_choice
+
+    deadline = context.user_data.get("task_deadline")
+    if calendar_choice == "да" and deadline is not None:
+        await ask_for_input(
+            update,
+            context,
+            "Укажите время начала события в формате ЧЧ:ММ (например 10:00):",
+            state=TASK_CALENDAR_START,
+            inline_keyboard=get_default_skip_keyboard("tasks:calendar_start:skip", button_text="⏭ По умолчанию 10:00"),
+        )
+        return TASK_CALENDAR_START
+
+    return await _finalize_task_creation(update, context)
+
+
+@owner_only
+async def create_task_calendar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Сохраняет время начала события календаря."""
+    if not update.effective_message or not update.effective_message.text:
+        return TASK_CALENDAR_START
+    raw = update.effective_message.text.strip()
+    try:
+        start_value = _parse_time_value(raw)
+    except ValueError:
+        await update.effective_message.reply_text("Неверный формат времени. Используйте ЧЧ:ММ, например 10:00.")
+        return TASK_CALENDAR_START
+    context.user_data["task_calendar_start"] = start_value
+    await ask_for_input(
+        update,
+        context,
+        "Укажите время окончания события в формате ЧЧ:ММ (например 11:00):",
+        state=TASK_CALENDAR_END,
+        inline_keyboard=get_default_skip_keyboard("tasks:calendar_end:skip", button_text="⏭ По умолчанию +1 час"),
+    )
+    return TASK_CALENDAR_END
+
+
+@owner_only
+async def create_task_calendar_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Сохраняет время окончания события календаря и завершает создание задачи."""
+    if not update.effective_message or not update.effective_message.text:
+        return TASK_CALENDAR_END
+    raw = update.effective_message.text.strip()
+    try:
+        end_value = _parse_time_value(raw)
+    except ValueError:
+        await update.effective_message.reply_text("Неверный формат времени. Используйте ЧЧ:ММ, например 11:00.")
+        return TASK_CALENDAR_END
+    context.user_data["task_calendar_end"] = end_value
+    return await _finalize_task_creation(update, context)
+
+
+async def _finalize_task_creation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Финализирует создание задачи и запись в Obsidian/БД."""
+    if not update.effective_message:
+        return TASK_MENU
 
     project_id = context.user_data.get("task_project_id")
     title = context.user_data.get("task_title", "").strip()
@@ -367,6 +544,7 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
     priority = context.user_data.get("task_priority", "⚡ Средний")
     deadline = context.user_data.get("task_deadline")
     estimate = context.user_data.get("task_estimate")
+    calendar_choice = str(context.user_data.get("task_calendar_choice", "нет")).lower()
 
     if not title or not description:
         await update.effective_message.reply_text(
@@ -417,10 +595,17 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
 
     google_event_id = None
     calendar_note = ""
+    progress_value = 0
     if calendar_choice == "да":
         if deadline is None:
             calendar_note = "📅 Не добавил в Calendar: для события нужен дедлайн."
         else:
+            start_time = context.user_data.get("task_calendar_start") or time(10, 0)
+            end_time = context.user_data.get("task_calendar_end") or time(11, 0)
+            if not isinstance(start_time, time):
+                start_time = time(10, 0)
+            if not isinstance(end_time, time):
+                end_time = time(11, 0)
             try:
                 runtime = await SettingsService(SessionLocal).get_runtime_settings()
                 calendar_service = GoogleCalendarService(runtime.timezone)
@@ -428,9 +613,11 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
                     title=final_title,
                     description=description,
                     due_date=deadline,
+                    start_time=start_time,
+                    end_time=end_time,
                 )
                 if google_event_id:
-                    calendar_note = "📅 Добавлено в Google Calendar."
+                    calendar_note = f"📅 Добавлено в Google Calendar ({start_time.strftime('%H:%M')}–{end_time.strftime('%H:%M')})."
                 else:
                     calendar_note = "📅 Calendar недоступен: проверь токен Google OAuth."
             except Exception:  # noqa: BLE001
@@ -460,6 +647,7 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
         description=description,
         deadline_iso=deadline.isoformat() if deadline else None,
         estimated_time=estimate,
+        progress=progress_value,
         created_at=created_at,
         tags=tags,
         links=links,
@@ -476,18 +664,29 @@ async def create_task_calendar(update: Update, context: ContextTypes.DEFAULT_TYP
             task_type="task",
             deadline=deadline,
             estimated_time=estimate,
+            progress=progress_value,
             obsidian_path=relative_path,
             google_event_id=google_event_id,
         )
 
     sync_note = "✅ Sync в Dropbox выполнен." if write_result.synced else f"⚠️ Sync не выполнен: {write_result.sync_error}"
     await update.effective_message.reply_text(
-        f"Задача создана:\n\n{_task_text(task.id, task.title, task.status, task.priority, task.obsidian_path)}\n\n{sync_note}\n{calendar_note}",
+        f"Задача создана:\n\n{_task_text(task.id, task.title, task.status, task.priority, task.progress, task.obsidian_path)}\n\n{sync_note}\n{calendar_note}",
         parse_mode="HTML",
     )
     await update.effective_message.reply_text("✅ Раздел задач", reply_markup=get_tasks_reply_keyboard())
 
-    for key in ("task_project_id", "task_title", "task_description", "task_priority", "task_deadline", "task_estimate"):
+    for key in (
+        "task_project_id",
+        "task_title",
+        "task_description",
+        "task_priority",
+        "task_deadline",
+        "task_estimate",
+        "task_calendar_choice",
+        "task_calendar_start",
+        "task_calendar_end",
+    ):
         context.user_data.pop(key, None)
     context.user_data.pop("expecting_text_input", None)
     context.user_data.pop("input_state", None)
@@ -529,7 +728,7 @@ async def _send_tasks_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     rows = []
     for task in tasks[:20]:
-        rows.append([InlineKeyboardButton(f"{task.status} {task.title}", callback_data=f"tasks:open:{task.id}")])
+        rows.append([InlineKeyboardButton(f"{task.status} {task.title} ({task.progress}%)", callback_data=f"tasks:open:{task.id}")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="tasks:back")])
     await edit_or_send(update, context, "Список задач:", reply_markup=InlineKeyboardMarkup(rows))
 
@@ -543,7 +742,7 @@ async def _send_task_card(update: Update, context: ContextTypes.DEFAULT_TYPE, ta
     await edit_or_send(
         update,
         context,
-        _task_text(task.id, task.title, task.status, task.priority, task.obsidian_path),
+        _task_text(task.id, task.title, task.status, task.priority, task.progress, task.obsidian_path),
         reply_markup=get_task_actions_keyboard(task.id),
     )
 
@@ -559,9 +758,31 @@ async def _set_task_status(
         if not task:
             await edit_or_send(update, context, "Задача не найдена.")
             return
+        if status == "🟢 Готово":
+            task.progress = 100
+        elif status == "🔴 Новая":
+            task.progress = 0
         await update_task_status(session, task, status)
     if update.callback_query:
         await update.callback_query.answer(f"Статус обновлён: {status}", show_alert=False)
+    await _send_task_card(update, context, task_id)
+
+
+async def _set_task_progress(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    task_id: int,
+    progress: int,
+) -> None:
+    async with SessionLocal() as session:
+        task = await get_task_by_id(session, task_id)
+        if not task:
+            await edit_or_send(update, context, "Задача не найдена.")
+            return
+        await update_task_progress(session, task, progress)
+
+    if update.callback_query:
+        await update.callback_query.answer(f"Прогресс: {progress}%", show_alert=False)
     await _send_task_card(update, context, task_id)
 
 
@@ -585,9 +806,23 @@ def register_tasks_handlers(application: Application) -> None:
             TASK_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_title)],
             TASK_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_description)],
             TASK_PRIORITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_priority)],
-            TASK_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_deadline)],
-            TASK_ESTIMATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_estimate)],
+            TASK_DEADLINE: [
+                CallbackQueryHandler(tasks_menu_callback, pattern=r"^tasks:deadline:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_deadline),
+            ],
+            TASK_ESTIMATE: [
+                CallbackQueryHandler(tasks_menu_callback, pattern=r"^tasks:estimate:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_estimate),
+            ],
             TASK_CALENDAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_calendar)],
+            TASK_CALENDAR_START: [
+                CallbackQueryHandler(tasks_menu_callback, pattern=r"^tasks:calendar_start:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_calendar_start),
+            ],
+            TASK_CALENDAR_END: [
+                CallbackQueryHandler(tasks_menu_callback, pattern=r"^tasks:calendar_end:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_calendar_end),
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", cancel_tasks),

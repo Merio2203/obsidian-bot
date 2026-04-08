@@ -26,6 +26,7 @@ async def test_create_and_update_task() -> None:
                 task_type="task",
                 deadline=date(2026, 4, 7),
                 estimated_time=2.0,
+                progress=0,
                 obsidian_path="Входящие/new-task.md",
             )
             assert task.id > 0
@@ -41,5 +42,6 @@ async def test_create_and_update_task() -> None:
             updated = await get_task_by_id(session, task.id)
             assert updated is not None
             assert updated.status == "🟡 В работе"
+            assert updated.progress == 0
 
         await engine.dispose()

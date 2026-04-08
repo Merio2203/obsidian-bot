@@ -14,6 +14,7 @@ async def test_write_and_read_markdown(tmp_path: Path) -> None:
     async def fake_sync() -> tuple[bool, str | None]:
         return True, None
 
+    service.sync_from_dropbox = fake_sync  # type: ignore[method-assign]
     service.sync_to_dropbox = fake_sync  # type: ignore[method-assign]
 
     await service.ensure_dirs()

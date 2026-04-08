@@ -11,6 +11,7 @@ from bot.utils.formatters import format_wikilinks_for_yaml, render_task_markdown
 def test_parse_deadline_valid() -> None:
     assert _parse_deadline("06.04.2026") == date(2026, 4, 6)
     assert _parse_deadline("-") is None
+    assert _parse_deadline("Сегодня") == date.today()
 
 
 def test_parse_deadline_invalid() -> None:
@@ -44,6 +45,7 @@ def test_render_task_markdown() -> None:
         description="Нужно реализовать эндпоинт",
         deadline_iso="2026-04-10",
         estimated_time=3.5,
+        progress=20,
         created_at="2026-04-06 10:00",
         tags=["backend", "api"],
         links=["[[CRM]]", "[[Сделать API]]"],
@@ -51,6 +53,7 @@ def test_render_task_markdown() -> None:
     assert "title: Сделать API" in markdown
     assert 'project: "[[Проект CRM]]"' in markdown
     assert "tags: [backend, api]" in markdown
+    assert "progress: 20" in markdown
     assert '  - "[[CRM]]"' in markdown
     assert '  - "[[Сделать API]]"' in markdown
 

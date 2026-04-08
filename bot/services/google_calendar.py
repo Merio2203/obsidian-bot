@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -70,18 +70,25 @@ class GoogleCalendarService:
         title: str,
         description: str,
         due_date: date,
+        start_time: time,
+        end_time: time,
     ) -> str | None:
-        """Создает событие на дату дедлайна и возвращает event_id."""
+        """Создает событие задачи на дату дедлайна с интервалом времени и возвращает event_id."""
         creds = await asyncio.to_thread(self._load_credentials)
         if not creds:
             return None
 
         calendar_id = self._pick_calendar_id()
+        start_dt = datetime.combine(due_date, start_time)
+        end_dt = datetime.combine(due_date, end_time)
+        if end_dt <= start_dt:
+            end_dt = start_dt + timedelta(hours=1)
+
         event_body = {
             "summary": title,
             "description": description,
-            "start": {"date": due_date.isoformat(), "timeZone": self.timezone_name},
-            "end": {"date": (due_date + timedelta(days=1)).isoformat(), "timeZone": self.timezone_name},
+            "start": {"dateTime": start_dt.isoformat(), "timeZone": self.timezone_name},
+            "end": {"dateTime": end_dt.isoformat(), "timeZone": self.timezone_name},
         }
 
         def _insert() -> str | None:

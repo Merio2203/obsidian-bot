@@ -33,6 +33,11 @@ async def on_startup() -> None:
     await init_db(engine)
     obsidian = ObsidianService()
     await obsidian.ensure_dirs()
+    sync_ok, sync_error = await obsidian.sync_from_dropbox()
+    if sync_ok:
+        logger.info("Vault успешно синхронизирован из Dropbox при старте.")
+    elif sync_error:
+        logger.warning("Не удалось подтянуть изменения из Dropbox при старте: %s", sync_error)
     await sync_db_with_vault()
     runtime_settings = await SettingsService(SessionLocal).get_runtime_settings()
     apply_log_level(runtime_settings.log_level)

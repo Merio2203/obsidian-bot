@@ -14,11 +14,25 @@ MAIN_MENU_BUTTONS = (
 
 MAIN_MENU_BUTTONS_REGEX = r"^(📁 Проекты|✅ Задачи|📓 Дневник|📚 Библиотека|📥 Входящие|📊 Сегодня|⚙️ Настройки)$"
 REMOVE_KEYBOARD = ReplyKeyboardRemove()
+DEFAULT_SKIP_BUTTON_TEXT = "⏭ Пропустить"
 
 
 def get_cancel_keyboard(cancel_callback: str = "cancel") -> InlineKeyboardMarkup:
     """Inline-клавиатура отмены для режимов ввода."""
     return InlineKeyboardMarkup([[InlineKeyboardButton("❌ Отмена", callback_data=cancel_callback)]])
+
+
+def get_default_skip_keyboard(
+    callback_data: str,
+    button_text: str = DEFAULT_SKIP_BUTTON_TEXT,
+) -> InlineKeyboardMarkup:
+    """Кнопка подстановки дефолтного значения для полей со значением '-'."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton(button_text, callback_data=callback_data)],
+            [InlineKeyboardButton("❌ Отмена", callback_data="cancel")],
+        ]
+    )
 
 
 def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
@@ -133,6 +147,18 @@ def get_task_calendar_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, one_time_keyboard=True)
 
 
+def get_task_deadline_keyboard() -> InlineKeyboardMarkup:
+    """Быстрый выбор дедлайна: сегодня, завтра или без дедлайна."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("📅 Сегодня", callback_data="tasks:deadline:today")],
+            [InlineKeyboardButton("📅 Завтра", callback_data="tasks:deadline:tomorrow")],
+            [InlineKeyboardButton("⏭ Без дедлайна", callback_data="tasks:deadline:skip")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="cancel")],
+        ]
+    )
+
+
 def get_task_status_keyboard(task_id: int) -> InlineKeyboardMarkup:
     """Inline-клавиатура выбора статуса задачи."""
     return InlineKeyboardMarkup(
@@ -150,7 +176,26 @@ def get_task_actions_keyboard(task_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("🔄 Изменить статус", callback_data=f"tasks:status:{task_id}")],
+            [InlineKeyboardButton("📈 Прогресс", callback_data=f"tasks:progress:{task_id}")],
             [InlineKeyboardButton("⬅️ К списку", callback_data="tasks:list")],
+        ]
+    )
+
+
+def get_task_progress_keyboard(task_id: int) -> InlineKeyboardMarkup:
+    """Inline-клавиатура выбора прогресса задачи."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("0%", callback_data=f"tasks:set_progress:{task_id}:0"),
+                InlineKeyboardButton("25%", callback_data=f"tasks:set_progress:{task_id}:25"),
+                InlineKeyboardButton("50%", callback_data=f"tasks:set_progress:{task_id}:50"),
+            ],
+            [
+                InlineKeyboardButton("75%", callback_data=f"tasks:set_progress:{task_id}:75"),
+                InlineKeyboardButton("100%", callback_data=f"tasks:set_progress:{task_id}:100"),
+            ],
+            [InlineKeyboardButton("⬅️ К задаче", callback_data=f"tasks:open:{task_id}")],
         ]
     )
 

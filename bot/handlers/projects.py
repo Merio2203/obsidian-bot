@@ -33,6 +33,7 @@ from bot.utils.helpers import (
 )
 from bot.utils.keyboards import (
     MAIN_MENU_BUTTONS_REGEX,
+    get_default_skip_keyboard,
     get_main_menu_keyboard,
     get_projects_reply_keyboard,
 )
@@ -138,6 +139,12 @@ async def projects_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
         await _send_project_card(update, context, idx)
         return PROJECT_MENU
 
+    if data == "projects:repo:skip":
+        context.user_data["project_repo_raw"] = "-"
+        if update.callback_query and update.callback_query.message:
+            await update.callback_query.message.reply_text("Пропускаю ссылку на репозиторий.")
+        return await create_project_repo(update, context)
+
     if data == "projects:status_current":
         await edit_or_send(update, context, "Выберите новый статус:", reply_markup=_build_status_keyboard())
         return PROJECT_MENU
@@ -216,6 +223,7 @@ async def create_project_stack(update: Update, context: ContextTypes.DEFAULT_TYP
         context,
         "Отправьте ссылку на GitHub репозиторий или '-' если ссылки нет:",
         state=CREATE_REPO,
+        inline_keyboard=get_default_skip_keyboard("projects:repo:skip"),
     )
     return CREATE_REPO
 
@@ -226,7 +234,10 @@ async def create_project_repo(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not update.effective_message or not update.effective_message.text:
         return CREATE_REPO
 
-    repo_raw = update.effective_message.text.strip()
+    if not context.user_data.get("project_repo_raw"):
+        context.user_data["project_repo_raw"] = update.effective_message.text.strip()
+    repo_raw = str(context.user_data.get("project_repo_raw", "")).strip()
+    context.user_data.pop("project_repo_raw", None)
     repo_url = None if repo_raw == "-" else repo_raw
 
     name: str = context.user_data.get("project_name", "").strip()
@@ -419,7 +430,10 @@ def register_projects_handlers(application: Application) -> None:
             CREATE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_project_name)],
             CREATE_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_project_description)],
             CREATE_STACK: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_project_stack)],
-            CREATE_REPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_project_repo)],
+            CREATE_REPO: [
+                CallbackQueryHandler(projects_menu_callback, pattern=r"^projects:repo:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, create_project_repo),
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", cancel_projects),
