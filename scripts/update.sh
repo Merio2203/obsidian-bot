@@ -23,7 +23,7 @@ docker compose down
 docker compose up -d --build
 
 echo "Синхронизация БД с vault..."
-docker compose exec -T bot python -c "import asyncio; from bot.services.obsidian_service import sync_db_with_vault; asyncio.run(sync_db_with_vault())"
+docker compose exec -T bot python -c "import asyncio; from bot.database import engine; from bot.database.models import init_db; from bot.services.obsidian_service import sync_db_with_vault; asyncio.run(init_db(engine)); asyncio.run(sync_db_with_vault())"
 echo "✅ БД синхронизирована"
 
 echo "✅ Бот обновлён и запущен"

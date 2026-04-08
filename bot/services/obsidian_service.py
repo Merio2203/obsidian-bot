@@ -270,8 +270,11 @@ async def sync_db_with_vault() -> None:
     """
     from sqlalchemy import select
 
-    from bot.database import SessionLocal
-    from bot.database.models import Project, Task
+    from bot.database import SessionLocal, engine
+    from bot.database.models import Project, Task, init_db
+
+    # Гарантируем актуальную схему перед любыми SELECT (в т.ч. для добавленных колонок).
+    await init_db(engine)
 
     service = ObsidianService()
     vault_projects = await service.get_projects_from_vault()

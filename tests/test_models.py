@@ -19,12 +19,14 @@ async def test_init_db_creates_tables() -> None:
 
         async with engine.begin() as conn:
             tables = await conn.run_sync(lambda c: inspect(c).get_table_names())
+            task_columns = await conn.run_sync(lambda c: [col["name"] for col in inspect(c).get_columns("tasks")])
 
         assert "projects" in tables
         assert "tasks" in tables
         assert "notes" in tables
         assert "app_settings" in tables
         assert "ai_cache" in tables
+        assert "progress" in task_columns
         await engine.dispose()
 
 
