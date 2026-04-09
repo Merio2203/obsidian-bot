@@ -11,6 +11,12 @@ def test_is_youtube_url() -> None:
     assert not ParserService.is_youtube_url("https://example.com/article")
 
 
+def test_is_instagram_reel_url() -> None:
+    assert ParserService.is_instagram_reel_url("https://www.instagram.com/reel/Cxyz/")
+    assert ParserService.is_instagram_reel_url("https://instagram.com/reels/ABC123")
+    assert not ParserService.is_instagram_reel_url("https://www.instagram.com/p/ABC123/")
+
+
 def test_normalize_tags_resources() -> None:
     tags = _normalize_tags("#AI, Product Management, ai, python")
     assert tags == ["ai", "product-management", "python"]

@@ -1,4 +1,4 @@
-"""Хендлеры раздела ресурсов (статьи и YouTube)."""
+"""Хендлеры раздела ресурсов (статьи и видео)."""
 
 from __future__ import annotations
 
@@ -118,7 +118,12 @@ async def resources_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not update.effective_message:
         return ConversationHandler.END
     await update.effective_message.reply_text("📚 Раздел библиотеки", reply_markup=get_resources_reply_keyboard())
-    await ask_for_input(update, context, "Отправь URL статьи или YouTube-видео для библиотеки.", state=RESOURCE_URL)
+    await ask_for_input(
+        update,
+        context,
+        "Отправь URL статьи, YouTube-видео или Instagram Reels для библиотеки.",
+        state=RESOURCE_URL,
+    )
     return RESOURCE_URL
 
 
@@ -145,8 +150,14 @@ async def resources_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     try:
         if parser.is_youtube_url(url):
             meta = await parser.parse_youtube(url)
-            summary = await ai.summarize_youtube(meta.title, meta.description, meta.author)
+            summary = await ai.summarize_video(meta.title, meta.description, meta.author)
             resource_type = "youtube"
+            folder = f"{VAULT_FOLDERS['resources']}/Видео"
+            title = meta.title
+        elif parser.is_instagram_reel_url(url):
+            meta = await parser.parse_instagram_reel(url)
+            summary = await ai.summarize_video(meta.title, meta.description, meta.author)
+            resource_type = "instagram_reel"
             folder = f"{VAULT_FOLDERS['resources']}/Видео"
             title = meta.title
         else:
@@ -165,7 +176,12 @@ async def resources_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         tags = _normalize_tags(raw_tags)
     except Exception:  # noqa: BLE001
         logger.error("Не удалось сгенерировать теги", exc_info=True)
-        tags = ["ресурс", "youtube" if resource_type == "youtube" else "статья"]
+        if resource_type == "youtube":
+            tags = ["ресурс", "youtube", "видео"]
+        elif resource_type == "instagram_reel":
+            tags = ["ресурс", "instagram", "reel", "видео"]
+        else:
+            tags = ["ресурс", "статья"]
     try:
         links_payload = await ai.generate_links_for_content(
             content_type="resource",

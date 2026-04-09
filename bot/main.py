@@ -22,6 +22,7 @@ from bot.handlers.tasks import register_tasks_handlers
 from bot.handlers.today import register_today_handlers
 from bot.services.ai_service import AIService
 from bot.services.obsidian_service import ObsidianService, sync_db_with_vault
+from bot.services.scheduler_service import BotSchedulerService
 from bot.services.settings_service import SettingsService
 from bot.utils.logger import apply_log_level, setup_logger
 from bot.utils.keyboards import get_main_reply_keyboard
@@ -84,12 +85,15 @@ async def run_bot() -> None:
         level_name=runtime_settings.log_level,
     )
     await app.start()
+    scheduler_service = BotSchedulerService(app)
+    await scheduler_service.start()
     await app.updater.start_polling(drop_pending_updates=True)
     logger.info("Бот запущен и ожидает сообщения.")
 
     await stop_event.wait()
 
     logger.info("Получен сигнал завершения, останавливаем бот.")
+    await scheduler_service.shutdown()
     await app.updater.stop()
     await app.stop()
     await app.shutdown()

@@ -1,4 +1,4 @@
-"""Сервис парсинга статей и метаданных YouTube."""
+"""Сервис парсинга статей и метаданных видео/статей."""
 
 from __future__ import annotations
 
@@ -32,11 +32,17 @@ class ParserService:
     """Единый сервис получения данных по URL."""
 
     YOUTUBE_RE = re.compile(r"(youtube\.com|youtu\.be)", re.IGNORECASE)
+    INSTAGRAM_REELS_RE = re.compile(r"(instagram\.com\/(reel|reels)\/)", re.IGNORECASE)
 
     @classmethod
     def is_youtube_url(cls, url: str) -> bool:
         """Определяет, является ли URL ссылкой на YouTube."""
         return bool(cls.YOUTUBE_RE.search(url or ""))
+
+    @classmethod
+    def is_instagram_reel_url(cls, url: str) -> bool:
+        """Определяет, является ли URL ссылкой на Instagram Reels."""
+        return bool(cls.INSTAGRAM_REELS_RE.search(url or ""))
 
     async def parse_article(self, url: str) -> ArticleData:
         """Парсит HTML-страницу и возвращает заголовок + основной текст."""
@@ -64,4 +70,17 @@ class ParserService:
         title = (info.get("title") or "Без названия").strip()
         description = (info.get("description") or "").strip()
         author = (info.get("uploader") or info.get("channel") or "Неизвестный автор").strip()
+        return YouTubeData(title=title, description=description[:8000], author=author)
+
+    async def parse_instagram_reel(self, url: str) -> YouTubeData:
+        """Получает метаданные Instagram Reels через yt-dlp."""
+
+        def _extract() -> dict:
+            with YoutubeDL({"quiet": True, "skip_download": True, "extract_flat": False}) as ydl:
+                return ydl.extract_info(url, download=False)
+
+        info = await asyncio.to_thread(_extract)
+        title = (info.get("title") or "Instagram Reel").strip()
+        description = (info.get("description") or "").strip()
+        author = (info.get("uploader") or info.get("channel") or "Instagram").strip()
         return YouTubeData(title=title, description=description[:8000], author=author)

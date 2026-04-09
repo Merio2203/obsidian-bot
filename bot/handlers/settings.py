@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -35,6 +37,7 @@ def _settings_keyboard(log_level: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("📓 Переключить напоминание дневника", callback_data="settings:toggle_diary")],
             [InlineKeyboardButton("🌅 Переключить утренний дайджест", callback_data="settings:toggle_digest")],
             [InlineKeyboardButton("🔄 Синхронизировать сейчас", callback_data="settings:sync")],
+            [InlineKeyboardButton("♻️ Перезагрузить бота", callback_data="settings:reload")],
             [InlineKeyboardButton("◀️ Назад", callback_data="settings:back")],
         ]
     )
@@ -141,6 +144,28 @@ async def settings_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
         text = "✅ Sync выполнен. БД обновлена по vault." if ok else f"⚠️ Ошибка sync: {err}\nБД обновлена из доступных файлов."
         cfg = await service.get_runtime_settings()
         await query.message.reply_text(text, reply_markup=_settings_keyboard(cfg.log_level))
+        return SETTINGS_MENU
+
+    if data == "settings:reload":
+        script_path = os.path.expanduser("~/apps/obsidian-bot/scripts/update.sh")
+        process = await asyncio.create_subprocess_exec(
+            "/bin/zsh",
+            "-lc",
+            f"'{script_path}'",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
+        if process.returncode == 0:
+            await query.message.reply_text("✅ Скрипт обновления запущен и завершился успешно.")
+        else:
+            error_text = stderr.decode("utf-8", errors="ignore").strip() or stdout.decode("utf-8", errors="ignore").strip()
+            await query.message.reply_text(f"⚠️ Ошибка перезагрузки: {error_text[:1200]}")
+        cfg = await service.get_runtime_settings()
+        await query.message.reply_text(
+            _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled, cfg.log_level),
+            reply_markup=_settings_keyboard(cfg.log_level),
+        )
         return SETTINGS_MENU
 
     if data == "settings:back_to_settings":

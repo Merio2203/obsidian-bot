@@ -24,7 +24,7 @@ Telegram-бот на Python для управления персональной
 4. Убедитесь, что конфиг доступен контейнеру через volume:
    - `~/.config/rclone:/root/.config/rclone:ro`
 
-Дополнительно: можно использовать скрипт [scripts/setup_rclone.sh](/Users/macbook/Documents/Project/MTL_HG/obsidian-bot/scripts/setup_rclone.sh).
+Дополнительно: можно использовать скрипт [`scripts/setup_rclone.sh`](scripts/setup_rclone.sh).
 
 ## 3. Создание Google OAuth credentials (пошагово)
 
@@ -47,8 +47,9 @@ Telegram-бот на Python для управления персональной
    - `TELEGRAM_OWNER_ID`
    - `ROUTERAI_API_KEY`
    - `VAULT_PATH`
-   - `DROPBOX_VAULT_PATH`
-   - `TIMEZONE`
+  - `DROPBOX_VAULT_PATH`
+  - `DROPBOX_DB_BACKUP_PATH` (опционально, по умолчанию `/ObsidianBotBackups`)
+  - `TIMEZONE`
 
 Для Obsidian плагина `remotely-save` рекомендуемый путь:
 - `DROPBOX_VAULT_PATH=/Приложения/remotely-save/ObsidianVault`

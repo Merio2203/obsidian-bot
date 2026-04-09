@@ -183,12 +183,28 @@ class AIService:
 
     async def summarize_youtube(self, title: str, description: str, author: str) -> str:
         """Генерирует резюме YouTube-видео по метаданным."""
+        return await self.summarize_video(title=title, description=description, author=author)
+
+    async def summarize_video(self, title: str, description: str, author: str) -> str:
+        """Генерирует резюме видео по метаданным."""
         system_prompt = (
             "Ты помощник для базы знаний. Сделай краткое резюме видео на русском "
             "по названию и описанию."
         )
         user_prompt = f"Название: {title}\nАвтор: {author}\nОписание:\n{description}"
         return await self._cached_completion("youtube_summary", system_prompt, user_prompt)
+
+    async def generate_task_title_from_description(self, description: str, project_name: str = "") -> str:
+        """Генерирует короткий заголовок задачи по описанию."""
+        system_prompt = (
+            "Сгенерируй короткое и понятное название задачи на русском по описанию. "
+            "Верни только одну строку без кавычек, максимум 60 символов."
+        )
+        user_prompt = (
+            f"Проект: {project_name or 'без проекта'}\n"
+            f"Описание задачи:\n{description}"
+        )
+        return await self._cached_completion("short_title", system_prompt, user_prompt)
 
     async def generate_cursor_prompt(self, payload: dict[str, Any]) -> str:
         """Генерирует структурированный промт для Cursor AI."""

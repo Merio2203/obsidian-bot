@@ -33,6 +33,7 @@ class Settings:
     google_token_file: Path
     vault_path: Path
     dropbox_vault_path: str
+    dropbox_db_backup_path: str
     timezone: str
     database_url: str
     log_file: Path
@@ -67,6 +68,9 @@ def load_settings() -> Settings:
     routerai_api_key = _get_required("ROUTERAI_API_KEY")
     vault_path = Path(_get_required("VAULT_PATH"))
     dropbox_vault_path = _get_required("DROPBOX_VAULT_PATH")
+    dropbox_db_backup_path = os.getenv("DROPBOX_DB_BACKUP_PATH", "/ObsidianBotBackups").strip()
+    if not dropbox_db_backup_path:
+        raise ConfigError("DROPBOX_DB_BACKUP_PATH не может быть пустым")
     timezone = _get_required("TIMEZONE")
 
     database_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:////app/data/bot.db").strip()
@@ -99,6 +103,7 @@ def load_settings() -> Settings:
         google_token_file=Path(os.getenv("GOOGLE_TOKEN_FILE", "/app/data/google_token.json").strip()),
         vault_path=vault_path,
         dropbox_vault_path=dropbox_vault_path,
+        dropbox_db_backup_path=dropbox_db_backup_path,
         timezone=timezone,
         database_url=database_url,
         log_file=log_file,

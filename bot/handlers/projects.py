@@ -445,17 +445,17 @@ async def _show_current_project_tasks(update: Update, context: ContextTypes.DEFA
         tasks = await get_tasks(session)
 
     if project is not None:
-        project_tasks = [task for task in tasks if task.project_id == project.id]
+        project_tasks = [task for task in tasks if task.project_id == project.id and not task.completed]
     else:
         project_dir = ObsidianService.sanitize_filename(project_name)
         prefix = f"{VAULT_FOLDERS['projects']}/{project_dir}/{PROJECT_SUBFOLDERS[0]}/"
-        project_tasks = [task for task in tasks if str(task.obsidian_path).startswith(prefix)]
+        project_tasks = [task for task in tasks if str(task.obsidian_path).startswith(prefix) and not task.completed]
 
     if not project_tasks:
         await edit_or_send(
             update,
             context,
-            f"У проекта «{project_name}» пока нет задач.",
+            f"У проекта «{project_name}» нет незавершённых задач.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ К проекту", callback_data="projects:open_current")]]),
         )
         return
