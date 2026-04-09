@@ -60,7 +60,6 @@ DEFAULT_SKIP_TEXT = "⏭ Пропустить"
 (
     TASK_MENU,
     TASK_PROJECT,
-    TASK_TITLE,
     TASK_DESCRIPTION,
     TASK_PRIORITY,
     TASK_DEADLINE,
@@ -68,21 +67,12 @@ DEFAULT_SKIP_TEXT = "⏭ Пропустить"
     TASK_CALENDAR,
     TASK_CALENDAR_START,
     TASK_CALENDAR_END,
-) = range(10)
+) = range(9)
 
 TASK_COMPLETED_MAP = {
     "todo": False,
     "done": True,
 }
-
-
-def _task_title_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("🤖 Сгенерировать название через AI", callback_data="tasks:title:ai")],
-            [InlineKeyboardButton("❌ Отмена", callback_data="cancel")],
-        ]
-    )
 
 
 def _parse_deadline(raw: str) -> Optional[date]:
@@ -252,17 +242,6 @@ async def tasks_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         project_raw = data.split(":", 2)[-1]
         project_id = None if project_raw == "none" else int(project_raw)
         context.user_data["task_project_id"] = project_id
-        await ask_for_input(
-            update,
-            context,
-            "Введите название задачи или нажмите «Сгенерировать название через AI».",
-            state=TASK_TITLE,
-            inline_keyboard=_task_title_keyboard(),
-        )
-        return TASK_TITLE
-
-    if data == "tasks:title:ai":
-        context.user_data["task_title"] = DEFAULT_INPUT_TOKEN
         await ask_for_input(update, context, "Опишите задачу подробнее:", state=TASK_DESCRIPTION)
         return TASK_DESCRIPTION
 
@@ -362,14 +341,8 @@ async def create_task_project_select(update: Update, context: ContextTypes.DEFAU
         return await universal_cancel_handler(update, context)
     if text == "Без проекта":
         context.user_data["task_project_id"] = None
-        await ask_for_input(
-            update,
-            context,
-            "Введите название задачи или нажмите «Сгенерировать название через AI».",
-            state=TASK_TITLE,
-            inline_keyboard=_task_title_keyboard(),
-        )
-        return TASK_TITLE
+        await ask_for_input(update, context, "Опишите задачу подробнее:", state=TASK_DESCRIPTION)
+        return TASK_DESCRIPTION
 
     projects_map: dict[str, int] = context.user_data.get("task_projects_map", {})
     project_id = projects_map.get(text)
@@ -378,23 +351,6 @@ async def create_task_project_select(update: Update, context: ContextTypes.DEFAU
         return TASK_PROJECT
 
     context.user_data["task_project_id"] = project_id
-    await ask_for_input(
-        update,
-        context,
-        "Введите название задачи или нажмите «Сгенерировать название через AI».",
-        state=TASK_TITLE,
-        inline_keyboard=_task_title_keyboard(),
-    )
-    return TASK_TITLE
-
-
-@owner_only
-async def create_task_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Сохраняет название задачи."""
-    if not update.effective_message or not update.effective_message.text:
-        return TASK_TITLE
-    raw_title = update.effective_message.text.strip()
-    context.user_data["task_title"] = raw_title if raw_title != DEFAULT_INPUT_TOKEN else DEFAULT_INPUT_TOKEN
     await ask_for_input(update, context, "Опишите задачу подробнее:", state=TASK_DESCRIPTION)
     return TASK_DESCRIPTION
 
@@ -548,7 +504,6 @@ async def _finalize_task_creation(update: Update, context: ContextTypes.DEFAULT_
         return TASK_MENU
 
     project_id = context.user_data.get("task_project_id")
-    title = context.user_data.get("task_title", "").strip()
     description = context.user_data.get("task_description", "").strip()
     priority = context.user_data.get("task_priority", "⚡ Средний")
     deadline = context.user_data.get("task_deadline")
@@ -577,18 +532,13 @@ async def _finalize_task_creation(update: Update, context: ContextTypes.DEFAULT_
     ai_service = AIService(SessionLocal)
     obsidian = ObsidianService()
     existing_links = await obsidian.get_existing_links("all")
-    final_title = title
+    final_title = ""
     tags: list[str] = ["задача"]
     links: list[str] = [f"[[Проект {project_name}]]"] if project_name != "Без проекта" else []
     try:
-        if not title or title == DEFAULT_INPUT_TOKEN:
-            generated = await ai_service.generate_task_title_from_description(description, project_name)
-            if generated:
-                final_title = generated.strip()[:120]
-        else:
-            short_title = await ai_service.generate_short_title(title, description)
-            if short_title:
-                final_title = short_title.strip()[:120]
+        generated = await ai_service.generate_task_title_from_description(description, project_name)
+        if generated:
+            final_title = generated.strip()[:120]
     except Exception:
         logger.error("Не удалось сгенерировать title задачи", exc_info=True)
 
@@ -694,7 +644,6 @@ async def _finalize_task_creation(update: Update, context: ContextTypes.DEFAULT_
 
     for key in (
         "task_project_id",
-        "task_title",
         "task_description",
         "task_priority",
         "task_deadline",
@@ -798,10 +747,6 @@ def register_tasks_handlers(application: Application) -> None:
             TASK_PROJECT: [
                 CallbackQueryHandler(tasks_menu_callback, pattern=r"^tasks:"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_project_select),
-            ],
-            TASK_TITLE: [
-                CallbackQueryHandler(tasks_menu_callback, pattern=r"^tasks:title:"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_title),
             ],
             TASK_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_description)],
             TASK_PRIORITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_task_priority)],

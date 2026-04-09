@@ -19,7 +19,7 @@ from telegram.ext import (
 
 from bot.database import SessionLocal
 from bot.services.obsidian_service import ObsidianService, sync_db_with_vault
-from bot.services.settings_service import SettingsService
+from bot.services.settings_service import SettingsPersistenceError, SettingsService
 from bot.utils.decorators import owner_only
 from bot.utils.keyboards import get_main_menu_keyboard
 from bot.utils.logger import LOG_LEVELS, apply_log_level
@@ -111,7 +111,11 @@ async def settings_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
         if level_name not in LOG_LEVELS:
             await query.answer("Неизвестный уровень", show_alert=True)
             return SETTINGS_MENU
-        await service.set_log_level(level_name)
+        try:
+            await service.set_log_level(level_name)
+        except SettingsPersistenceError as exc:
+            await query.message.reply_text(f"⚠️ Не удалось сохранить настройки: {exc}")
+            return SETTINGS_MENU
         apply_log_level(level_name)
         await query.answer(f"✅ Уровень логов изменён на {level_name}", show_alert=False)
         cfg = await service.get_runtime_settings()
@@ -122,7 +126,11 @@ async def settings_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
         return SETTINGS_MENU
 
     if data == "settings:toggle_diary":
-        cfg = await service.toggle_diary_reminder()
+        try:
+            cfg = await service.toggle_diary_reminder()
+        except SettingsPersistenceError as exc:
+            await query.message.reply_text(f"⚠️ Не удалось сохранить настройки: {exc}")
+            return SETTINGS_MENU
         await query.message.reply_text(
             _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled, cfg.log_level),
             reply_markup=_settings_keyboard(cfg.log_level),
@@ -130,7 +138,11 @@ async def settings_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
         return SETTINGS_MENU
 
     if data == "settings:toggle_digest":
-        cfg = await service.toggle_morning_digest()
+        try:
+            cfg = await service.toggle_morning_digest()
+        except SettingsPersistenceError as exc:
+            await query.message.reply_text(f"⚠️ Не удалось сохранить настройки: {exc}")
+            return SETTINGS_MENU
         await query.message.reply_text(
             _settings_text(cfg.timezone, cfg.diary_reminder_enabled, cfg.morning_digest_enabled, cfg.log_level),
             reply_markup=_settings_keyboard(cfg.log_level),
@@ -192,6 +204,9 @@ async def settings_timezone_input(update: Update, context: ContextTypes.DEFAULT_
     service = SettingsService(SessionLocal)
     try:
         cfg = await service.set_timezone(timezone_name)
+    except SettingsPersistenceError as exc:
+        await update.effective_message.reply_text(f"⚠️ Не удалось сохранить настройки: {exc}")
+        return SETTINGS_MENU
     except Exception:
         logger.error("Ошибка сохранения timezone в настройках", exc_info=True)
         await update.effective_message.reply_text("Некорректная timezone. Пример: Europe/Kaliningrad")

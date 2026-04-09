@@ -53,6 +53,29 @@ async def test_tasks_set_status_callback_parsing(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.asyncio
+async def test_tasks_project_choice_skips_title_and_asks_description(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = {"state": None, "prompt": None}
+
+    async def fake_ask_for_input(update, context, prompt: str, state: int | None = None, **kwargs):  # type: ignore[no-untyped-def]
+        captured["state"] = state
+        captured["prompt"] = prompt
+        return None
+
+    monkeypatch.setattr(tasks_module, "ask_for_input", fake_ask_for_input)
+
+    update = FakeUpdate(user_id=42, data="tasks:project:none")
+    context = types.SimpleNamespace(user_data={})
+    result_state = await tasks_module.tasks_menu_callback(update, context)
+
+    assert result_state == tasks_module.TASK_DESCRIPTION
+    assert captured["state"] == tasks_module.TASK_DESCRIPTION
+    assert captured["prompt"] == "Опишите задачу подробнее:"
+    assert update.callback_query.answered is True
+
+
+@pytest.mark.asyncio
 async def test_projects_set_status_callback_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
     called = {"value": False}
 
