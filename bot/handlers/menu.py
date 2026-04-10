@@ -7,7 +7,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 from bot.config import settings
 from bot.utils.decorators import owner_only
-from bot.utils.keyboards import get_mini_app_keyboard
+from bot.utils.keyboards import get_mini_app_inline_keyboard, get_mini_app_keyboard
 
 
 @owner_only
@@ -25,10 +25,15 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "Привет! Я ваш Obsidian AI-ассистент.\n"
         "Основной интерфейс теперь работает как Telegram App.\n\n"
         f"{app_hint}",
-        reply_markup=get_mini_app_keyboard(),
+        reply_markup=get_mini_app_inline_keyboard(),
     )
     if context and msg and getattr(msg, "message_id", None) is not None:
         context.user_data["menu_message_id"] = msg.message_id
+
+    await update.effective_message.reply_text(
+        "Если inline-кнопка не открылась, можно использовать кнопку в клавиатуре ниже.",
+        reply_markup=get_mini_app_keyboard(),
+    )
 
 
 @owner_only

@@ -65,6 +65,15 @@ def get_mini_app_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
+def get_mini_app_inline_keyboard() -> InlineKeyboardMarkup:
+    """Inline-кнопка запуска Mini App (более надежная передача initData)."""
+    button = InlineKeyboardButton(
+        text="🚀 Открыть Obsidian App",
+        web_app=WebAppInfo(url=settings.mini_app_url) if settings.mini_app_url else None,
+    )
+    return InlineKeyboardMarkup([[button]])
+
+
 def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
     """Совместимость со старым именем функции главного меню."""
     return get_main_reply_keyboard()
