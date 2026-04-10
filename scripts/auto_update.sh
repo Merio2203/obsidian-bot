@@ -17,6 +17,7 @@ API_HEALTH_URL="${AUTO_UPDATE_API_HEALTH_URL:-http://127.0.0.1:8000/api/health}"
 HEALTH_TIMEOUT="${AUTO_UPDATE_HEALTH_TIMEOUT:-10}"
 SYNC_DB="${AUTO_UPDATE_SYNC_DB:-1}"
 COMPOSE_SERVICES="${AUTO_UPDATE_COMPOSE_SERVICES:-api web bot}"
+IGNORE_PATHS_RAW="${AUTO_UPDATE_IGNORE_PATHS:-vault/**,.env.save}"
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -53,8 +54,20 @@ fi
 
 cd "$ROOT_DIR"
 
-if [[ -n "$(git status --porcelain)" ]]; then
+IFS=',' read -r -a ignore_paths <<< "$IGNORE_PATHS_RAW"
+status_cmd=(git status --porcelain --untracked-files=all -- .)
+for path in "${ignore_paths[@]}"; do
+  trimmed_path="$(echo "$path" | xargs)"
+  if [[ -n "$trimmed_path" ]]; then
+    status_cmd+=(":(exclude)$trimmed_path")
+  fi
+done
+dirty_status="$("${status_cmd[@]}")"
+
+if [[ -n "$dirty_status" ]]; then
   log "SKIP: working tree is dirty; manual intervention required"
+  log "Dirty entries:"
+  printf '%s\n' "$dirty_status" | sed -n '1,20p'
   exit 0
 fi
 

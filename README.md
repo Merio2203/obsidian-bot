@@ -162,3 +162,4 @@ crontab -e
 - `AUTO_UPDATE_HEALTH_TIMEOUT` (по умолчанию `10`)
 - `AUTO_UPDATE_SYNC_DB` (`1` или `0`)
 - `AUTO_UPDATE_COMPOSE_SERVICES` (по умолчанию `api web bot`)
+- `AUTO_UPDATE_IGNORE_PATHS` (через запятую, по умолчанию `vault/**,.env.save`)

@@ -30,3 +30,5 @@ def test_auto_update_script_has_safety_guards() -> None:
     assert "git pull --ff-only" in content
     assert "docker compose up -d --build" in content
     assert "AUTO_UPDATE_BRANCH" in content
+    assert "AUTO_UPDATE_IGNORE_PATHS" in content
+    assert ":(exclude)" in content
