@@ -13,6 +13,31 @@ const TABS = [
   ["settings", "Настройки"],
 ];
 
+function extractInitDataFromUrl() {
+  const tryRead = (raw) => {
+    if (!raw) return "";
+    const normalized = raw.startsWith("?") || raw.startsWith("#") ? raw.slice(1) : raw;
+    const params = new URLSearchParams(normalized);
+    const candidates = [
+      params.get("tgWebAppData"),
+      params.get("tgWebAppInitData"),
+      params.get("initData"),
+    ];
+    for (const value of candidates) {
+      if (value && value.trim()) {
+        try {
+          return decodeURIComponent(value);
+        } catch {
+          return value;
+        }
+      }
+    }
+    return "";
+  };
+
+  return tryRead(window.location.search) || tryRead(window.location.hash);
+}
+
 function parseDiarySections(content) {
   if (!content) {
     return { mood: "😐", day: "", done: "", ideas: "", tomorrow: "" };
@@ -69,6 +94,13 @@ export default function App() {
           setInitData(data);
           return;
         }
+      }
+
+      const dataFromUrl = extractInitDataFromUrl();
+      if (dataFromUrl) {
+        done = true;
+        setInitData(dataFromUrl);
+        return;
       }
 
       if (DEV_INIT_DATA) {
