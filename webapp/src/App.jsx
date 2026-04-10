@@ -34,7 +34,7 @@ function parseDiarySections(content) {
 
 export default function App() {
   const [tab, setTab] = useState("today");
-  const [initData, setInitData] = useState("");
+  const [initData, setInitData] = useState(null);
   const [authOk, setAuthOk] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,14 +53,45 @@ export default function App() {
   const [resourceForm, setResourceForm] = useState({ url: "" });
 
   useEffect(() => {
-    const tg = window.Telegram?.WebApp;
-    if (tg) {
-      tg.ready();
-      tg.expand();
-      setInitData(tg.initData || "");
-    } else {
-      setInitData(DEV_INIT_DATA);
-    }
+    let done = false;
+    const startedAt = Date.now();
+
+    const tryInit = () => {
+      if (done) return;
+
+      const tg = window.Telegram?.WebApp;
+      if (tg) {
+        tg.ready();
+        tg.expand();
+        const data = tg.initData || "";
+        if (data) {
+          done = true;
+          setInitData(data);
+          return;
+        }
+      }
+
+      if (DEV_INIT_DATA) {
+        done = true;
+        setInitData(DEV_INIT_DATA);
+        return;
+      }
+
+      if (Date.now() - startedAt > 10000) {
+        done = true;
+        setInitData("");
+        setError(
+          "Не удалось получить initData от Telegram. Открой приложение кнопкой из бота снова."
+        );
+      }
+    };
+
+    tryInit();
+    const timer = setInterval(tryInit, 300);
+    return () => {
+      done = true;
+      clearInterval(timer);
+    };
   }, []);
 
   const headers = useMemo(() => {
@@ -277,8 +308,18 @@ export default function App() {
     }
   }
 
-  if (!initData) {
+  if (initData === null) {
     return <div className="app"><p>Ожидание initData Telegram WebApp...</p></div>;
+  }
+
+  if (!initData) {
+    return (
+      <div className="app">
+        <h1>Obsidian App</h1>
+        {error && <div className="alert">{error}</div>}
+        <p>Если открываешь не из Telegram, добавь `VITE_DEV_INIT_DATA` для локальной отладки.</p>
+      </div>
+    );
   }
 
   return (
