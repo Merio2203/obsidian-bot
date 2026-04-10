@@ -122,3 +122,43 @@ docker-compose logs -f bot
 ```bash
 tail -f ./data/logs/bot_$(date +%Y-%m-%d).log
 ```
+
+## 9. Автоматическое обновление
+
+В проекте есть безопасный скрипт авто-обновления:
+- [`scripts/auto_update.sh`](scripts/auto_update.sh)
+
+Что делает скрипт:
+- ставит lock-файл, чтобы не запускаться параллельно;
+- проверяет чистоту git-дерева;
+- обновляет только через fast-forward (`git pull --ff-only`);
+- пересобирает и поднимает `api`, `web`, `bot`;
+- синхронизирует БД с vault;
+- проверяет `API_HEALTH_URL`.
+
+Ручной запуск:
+
+```bash
+cd ~/apps/obsidian-bot
+bash scripts/auto_update.sh
+```
+
+Пример запуска каждый день в 04:10 (cron):
+
+```bash
+crontab -e
+```
+
+Добавьте строку:
+
+```cron
+10 4 * * * cd /home/deploy/apps/obsidian-bot && /usr/bin/env bash scripts/auto_update.sh >> /home/deploy/apps/obsidian-bot/data/logs/auto-update.log 2>&1
+```
+
+Полезные переменные окружения для кастомизации:
+- `AUTO_UPDATE_ROOT_DIR` (по умолчанию `~/apps/obsidian-bot`)
+- `AUTO_UPDATE_BRANCH` (по умолчанию `codex/miniapp-migration`)
+- `AUTO_UPDATE_API_HEALTH_URL` (по умолчанию `http://127.0.0.1:8000/api/health`)
+- `AUTO_UPDATE_HEALTH_TIMEOUT` (по умолчанию `10`)
+- `AUTO_UPDATE_SYNC_DB` (`1` или `0`)
+- `AUTO_UPDATE_COMPOSE_SERVICES` (по умолчанию `api web bot`)
