@@ -1,6 +1,15 @@
 """Клавиатуры Telegram для интерфейса бота."""
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    WebAppInfo,
+)
+
+from bot.config import settings
 
 MAIN_MENU_BUTTONS = (
     "📁 Проекты",
@@ -43,6 +52,16 @@ def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
         ["📥 Входящие", "📊 Сегодня"],
         ["⚙️ Настройки"],
     ]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+def get_mini_app_keyboard() -> ReplyKeyboardMarkup:
+    """Главная клавиатура launcher-режима: открывает Telegram Mini App."""
+    button = KeyboardButton(
+        text="🚀 Открыть Obsidian App",
+        web_app=WebAppInfo(url=settings.mini_app_url) if settings.mini_app_url else None,
+    )
+    keyboard = [[button]]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 

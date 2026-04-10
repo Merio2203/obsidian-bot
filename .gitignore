@@ -14,3 +14,5 @@ data/google_token.json
 data/*.log
 data/logs/
 vault/.obsidian/
+webapp/node_modules/
+webapp/dist/

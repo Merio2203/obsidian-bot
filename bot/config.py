@@ -39,6 +39,10 @@ class Settings:
     log_file: Path
     ai_max_retries: int
     ai_retry_delay_seconds: int
+    mini_app_url: str
+    api_host: str
+    api_port: int
+    api_cors_origins: list[str]
 
 
 class ConfigError(ValueError):
@@ -90,6 +94,11 @@ def load_settings() -> Settings:
     google_calendar_ids = [
         item.strip() for item in google_calendar_ids_raw.split(",") if item.strip()
     ]
+    mini_app_url = os.getenv("MINI_APP_URL", "").strip()
+    api_host = os.getenv("API_HOST", "0.0.0.0").strip()
+    api_port = int(os.getenv("API_PORT", "8000").strip())
+    api_cors_origins_raw = os.getenv("API_CORS_ORIGINS", "").strip()
+    api_cors_origins = [item.strip() for item in api_cors_origins_raw.split(",") if item.strip()]
 
     return Settings(
         telegram_bot_token=telegram_bot_token,
@@ -109,6 +118,10 @@ def load_settings() -> Settings:
         log_file=log_file,
         ai_max_retries=ai_max_retries,
         ai_retry_delay_seconds=ai_retry_delay_seconds,
+        mini_app_url=mini_app_url,
+        api_host=api_host,
+        api_port=api_port,
+        api_cors_origins=api_cors_origins,
     )
 
 

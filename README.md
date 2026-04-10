@@ -1,6 +1,7 @@
 # Obsidian AI Assistant — Telegram Bot
 
 Telegram-бот на Python для управления персональной базой знаний в Obsidian с AI-помощником, Google Calendar и синхронизацией через rclone в Dropbox.
+Текущая версия поддерживает Telegram Mini App (React + FastAPI) и launcher-режим бота.
 
 ## 1. Требования и зависимости
 
@@ -50,6 +51,9 @@ Telegram-бот на Python для управления персональной
   - `DROPBOX_VAULT_PATH`
   - `DROPBOX_DB_BACKUP_PATH` (опционально, по умолчанию `/ObsidianBotBackups`)
   - `TIMEZONE`
+  - `MINI_APP_URL` (публичный HTTPS URL Mini App)
+  - `API_HOST` / `API_PORT`
+  - `API_CORS_ORIGINS` (список origin через запятую)
 
 Для Obsidian плагина `remotely-save` рекомендуемый путь:
 - `DROPBOX_VAULT_PATH=/Приложения/remotely-save/ObsidianVault`
@@ -59,6 +63,11 @@ Telegram-бот на Python для управления персональной
 ```bash
 docker-compose up -d --build
 ```
+
+После запуска:
+- `web` — фронтенд Mini App: `http://<host>:8080`
+- `api` — backend API: `http://<host>:8000`
+- `bot` — Telegram launcher + уведомления
 
 Логи:
 
